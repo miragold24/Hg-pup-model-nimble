@@ -1,45 +1,4 @@
-### Data and distribution visualizatoin 
-
-# MCMC settings
-
-#build model object from NimbleCode
-model <- nimbleModel(code=code,inits=inits_list,data=data_list,
-                     constants=constants_list,
-                     dimensions=list(wPups=ndays,mPups=ndays,born=ndays,
-                                     Pb_sum=ndays,Pm_sum=ndays,Pl_sum=ndays))
-
-#############
-## MCMC configuration: what nodes samplers operate on, any parameters needed, etc
-#HgMCMCconf <- configureMCMC(model)
-# HgMCMCconfiguration$printSamplers()
-#build MCMC object
-HgMCMC <- buildMCMC(model,monitors=params,enableWAIC = TRUE)
-#runMCMC(HgMCMC,niter=1)#set =1 bc with one calculation inits are used
-#& can diagnose there
-# # #compile the model object first for the MCMC to compile 
-Cmodel<- compileNimble(model,showCompilerOutput = F)
-CHgMCMC <- compileNimble(HgMCMC,project=Cmodel)
-samples<-runMCMC(CHgMCMC,niter=12000)
-#print(system.time(CHgMCMC$run(10000)))
-samples<-as.matrix(CHgMCMC$mvSamples)
-mean(samples[,'Nborn'])
-## plot MCMC chains
-#par(mfrow = c(1, 3))
-plot(samples[ , 'Nborn'], type = 'l', xlab = 'iteration',
-     ylab = expression(Nborn))
-
-# plot(samples[ , 'start'], type = 'l', xlab = 'iteration',
-#      ylab = expression(start))
-# plot(samples[ , 'mu.bday'], type = 'l', xlab = 'iteration',
-#      ylab = expression(mu.bday))
-# plot(samples[ , 'sd.bday'], type = 'l', xlab = 'iteration',
-#      ylab = expression(sd.bday))
-## continue the same run of the MCMC for 10000 more iterations: 
-CHgMCMC$run(10000,reset=FALSE)
-samples_update<- as.matrix(CHgMCMC$mvSamples)
-# plot(samples_update[ , 'Nborn'], type = 'l', xlab = 'iteration',  
-#       ylab = expression(Nborn))
-mean(samples_update[,'Nborn'])
+### Outputs/plots for MCMC runs
 
 #########################################################
 ##mcmc output 
@@ -67,21 +26,37 @@ sd(mcmc$chain1[,"Nborn"])
  mean(Nborn.samples)
 
 
-## If has not converged, continue sampling
-# start <- Sys.time()
-# out2 <- clusterEvalQ(cl, {
-#   out1 <- runMCMC(CmodelMCMC, niter = 20000)
-#   return(as.mcmc(out1))
-# })
-# 
-# out.mcmc.update1 <- as.mcmc(out2)
-# 
-# out.mcmc.bind <- mcmc.list()
-# for (i in seq_len(nc)) {
-#   out.mcmc.bind[[i]] <- mcmc(rbind(out.mcmc[[i]], out.mcmc.update1[[i]]))
-# }
-# traceplot(out.mcmc.bind[, "b"])
-# # 
 ###########################################
 
+ #############
+ ## MCMC configuration: what nodes samplers operate on, any parameters needed, etc
+ #HgMCMCconf <- configureMCMC(model)
+ # HgMCMCconfiguration$printSamplers()
+ #build MCMC object
+ HgMCMC <- buildMCMC(model,monitors=params,enableWAIC = TRUE)
+ #runMCMC(HgMCMC,niter=1)#set =1 bc with one calculation inits are used
+ #& can diagnose there
+ # # #compile the model object first for the MCMC to compile 
+ Cmodel<- compileNimble(model,showCompilerOutput = F)
+ CHgMCMC <- compileNimble(HgMCMC,project=Cmodel)
+ samples<-runMCMC(CHgMCMC,niter=12000)
+ #print(system.time(CHgMCMC$run(10000)))
+ samples<-as.matrix(CHgMCMC$mvSamples)
+ mean(samples[,'Nborn'])
+ ## plot MCMC chains
+ #par(mfrow = c(1, 3))
+ plot(samples[ , 'Nborn'], type = 'l', xlab = 'iteration',
+      ylab = expression(Nborn))
  
+ # plot(samples[ , 'start'], type = 'l', xlab = 'iteration',
+ #      ylab = expression(start))
+ # plot(samples[ , 'mu.bday'], type = 'l', xlab = 'iteration',
+ #      ylab = expression(mu.bday))
+ # plot(samples[ , 'sd.bday'], type = 'l', xlab = 'iteration',
+ #      ylab = expression(sd.bday))
+ ## continue the same run of the MCMC for 10000 more iterations: 
+ CHgMCMC$run(10000,reset=FALSE)
+ samples_update<- as.matrix(CHgMCMC$mvSamples)
+ # plot(samples_update[ , 'Nborn'], type = 'l', xlab = 'iteration',  
+ #       ylab = expression(Nborn))
+ mean(samples_update[,'Nborn'])
