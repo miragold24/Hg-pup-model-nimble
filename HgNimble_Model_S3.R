@@ -9,8 +9,8 @@ library(MCMCvis)
 
 #getwd() 
 
-#source("HgSim_noS4_MG.R")  #simulate pups born over season () 
-#source("HgNimble_input_noS4.R") # Nimble functions to count whitecoat and moulted pups present on any given day
+#source("HgSim_S3_MG.R")  #simulate pups born over season () 
+#source("HgNimble_input_S3.R") # Nimble functions to count whitecoat and moulted pups present on any given day
 #source("HgSim_S3.R")
 code <- nimbleCode({
   #priors
