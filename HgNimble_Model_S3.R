@@ -21,11 +21,7 @@ code <- nimbleCode({
   sd.bday ~ dunif(9,10)
   #constraints
   one ~ dconstraint(start < mu.bday)
-  # for (obs in 1:length(obsdays)){
-  # two[obs] ~ dconstraint(wObs[obs] < whiteCount[obs])
-  # three[obs] ~ dconstraint(mObs[obs] < moultCount[obs])
-  # }
-  
+
   # deterministic and continuous births over breeding season (ndays)
   for (t in 1:ndays){ 
     born[t] <- Pb_sum[t]*Nborn
