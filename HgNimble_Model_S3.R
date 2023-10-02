@@ -7,9 +7,8 @@ library(nimble)
 library(coda)
 library(MCMCvis)
 
-#getwd() 
+getwd() 
 
-#source("HgSim_S3_MG.R")  #simulate pups born over season () 
 #source("HgNimble_input_S3.R") # Nimble functions to count whitecoat and moulted pups present on any given day
 #source("HgSim_S3.R")
 code <- nimbleCode({
@@ -93,38 +92,41 @@ code <- nimbleCode({
   #but classification error allows for more observed whitepups than are actually 
   #there bc of misclassification 
   # =================================================================
-  ## observation error only:
-  for (obs in 1:length(obsdays)) {
-    wObs[obs] ~ dbinom(POWhite, round(whitePups[obsdays[obs]]))
-    mObs[obs] ~ dbinom(POMoult, round(moultPups[obsdays[obs]]))
-    }
+  # observation error only:
+  # for (obs in 1:length(obsdays)) {
+  #   wObs[obs] ~ dbinom(POWhite, round(whitePups[obsdays[obs]])) + dbinom(POMoult, round(moultPups[obsdays[obs]]))*
+  #                                                                dbinom(1-PCMoult, round(moultPups[obsdays[obs]]))
+  #   mObs[obs] ~ dbinom(POMoult, round(moultPups[obsdays[obs]])) + dbinom(PCMoult, round(moultPups[obsdays[obs]]))
+  #   }
 
   ## debug to check if issue is with binomial process
   # for (obs in 1:length(obsdays)){
   #   wObs[obs] ~ dnorm(whitePups[obsdays[obs]],sd=0.01)
   #   mObs[obs] ~ dnorm(moultPups[obsdays[obs]],sd=0.03)
-  #   
+  # 
   # }
   
   
   #################################################################
   ###OBS + CLASSIFICATION ERROR 
   ### account for obs error
-  #  whiteCount[1:ndays] <- round((whitePups[1:ndays]*POWhite))
-  #  moultCount[1:ndays] <- round((moultPups[1:ndays]*POMoult))
-  #  #NCount[1:ndays] <- whiteCount[1:ndays]+moultCount[1:ndays]
-  # 
+   whiteCount[1:ndays] <- round((whitePups[1:ndays]*POWhite))
+   moultCount[1:ndays] <- round((moultPups[1:ndays]*POMoult))
+
+
   # #add classification error
-  # for (obs in 1:length(obsdays)){
-  #  #WhiteCount * prob of incorrectly classifying moulted as white 
-  #  wObs[obs] ~ dbinom((1-PCMoult), whiteCount[obsdays[obs]])
-  #  mObs[obs] ~ dbinom( PCMoult, moultCount[obsdays[obs]])
+  for (obs in 1:length(obsdays)){
+   #WhiteCount * prob of incorrectly classifying moulted as white
+   wm[obs] ~ dbinom(1-PCMoult, moultCount[obsdays[obs]]) 
+   wObs[obs] <- wm[obs] + whiteCount[obsdays[obs]]
+   mObs[obs] ~ dbinom(PCMoult, moultCount[obsdays[obs]])
+   totObs[obs] <- whiteCount[obsdays[obs]]+moultCount[obsdays[obs]]
+     }
   # 
-  #  }
-  
-   })
+    })
 
 
+### wObs + mObs should equal whiteCount+moultCount bc same total observed 
 ## supply data, constants and inits
 data_list=list(wObs=sim_S3$whiteObs,mObs=sim_S3$moultObs,
                whiteObs=sim_S3$whiteObs,moultObs=sim_S3$moultObs)
@@ -154,7 +156,7 @@ nc <- 2   ;   ni <- 11000   ;   nb <- 1000   ;   nt <- 0
  # Parameters monitored
                    
  params = c('Nborn','whitePups','moultPups',
-            'start','mu.bday', 'sd.bday')
+            'start','mu.bday', 'sd.bday','totObs')
  HgMCMC <- buildMCMC(model,monitors=params)
  runMCMC(HgMCMC,niter=1)#set =1 bc with one calculation inits are used
  #& can diagnose there
