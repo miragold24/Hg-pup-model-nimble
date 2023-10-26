@@ -116,7 +116,6 @@ code <- nimbleCode({
 
   # #add classification error
   for (obs in 1:length(obsdays)){
-   #WhiteCount * prob of incorrectly classifying moulted as white
    wm[obs] ~ dbinom(1-PCMoult, moultCount[obsdays[obs]]) 
    wObs[obs] <- wm[obs] + whiteCount[obsdays[obs]]
    mObs[obs] ~ dbinom(PCMoult, moultCount[obsdays[obs]])
