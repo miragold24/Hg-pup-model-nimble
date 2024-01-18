@@ -14,8 +14,6 @@ code <- nimbleCode({
    #priors
    #Nborn ~ dgamma(shape=500,scale=1) #Nborn (N)=500 in simulation
    Nborn ~ dgamma(shape=485, scale=1) 
-   # start ~ dunif(25,35) 
-   # mu.bday ~ dunif(35,50)
    start ~ dunif(25,45)
    mu.bday ~ dunif(20,60)
    #sd.bday ~ dunif(7,12) 
