@@ -14,8 +14,8 @@ code <- nimbleCode({
   #priors
    #Nborn ~ dgamma(shape=500,scale=1) #Nborn (N)=500 in simulation
    Nborn ~ dgamma(shape=485, scale=1) 
-   start ~ dunif(1,45) # start is 32 in simulation
-   mu.bday ~ dunif(20,60)
+   start ~ dunif(25,35) # start is 32 in simulation
+   mu.bday ~ dunif(35,50)
    #sd.bday ~ dunif(7,12) 
    #shifted scale beta for sd.bday
    # beta distribution
@@ -24,9 +24,11 @@ code <- nimbleCode({
    sd.bday <- shift + (scale * standard_beta)
    
    
-  # # # #constraints
+  #constraints
      one ~ dconstraint(start < mu.bday)
-
+  # alt constraint - truncated normal for start
+     #start ~ T(dnorm(0, 1), 0, mu.bday)
+     #T(dnorm(0, 1), -15, mu.bday) #start is within 15 days of mu.bday
   # deterministic and continuous births over breeding season (ndays)
   for (t in 1:ndays){ 
     born[t] <- Pb_sum[t]*Nborn
@@ -94,33 +96,10 @@ code <- nimbleCode({
   # Nimble functions in HGNimble_input_noS4.R
   whitePups[1:ndays] <- whiteSum(born[1:ndays],PS4_sum[1:amax], Pm_sum[1:amax])
   S4Pups[1:ndays] <- S4Sum(born[1:ndays], PS4_sum[1:amax], Pm_sum[1:amax])
-  moultPups[1:ndays] <- moultSum(born[1:ndays], Pm_sum[1:amax], Pl_sum[1:amax])
+  moultPups[1:ndays] <- moultSum(born[1:ndays], Pm_sum[1:amax], Pl_sum[1:amax],moultObs[])
   #totPups[1:ndays] <- whitePups[1:ndays]+moultPups[1:ndays]
   
-  #================================================================
-  ### observation model :
-  # account for imperfect observation/classification error 
-  # #==============================================================
-  ### Observation error: 
-  ### POWhite = probability of observing a whitecoat
-  ### POMoult = probability of observing a moulted pup 
-  ### Classification error:
-  ### PCMoult = 0.82 Probability of correctly classifying a moulted as moulted
-  ### 1-PCMoult is the probability of incorrectly classifying moulted as whitecoat 
-  ### (add to whitecoat obs count)
-  ### PCWhite = 1.0
-  # you cannot have more pups observed than were there to be observed on survey day
-  #but classification error allows for more observed whitepups than are actually 
-  #there bc of misclassification 
-  # ============================================================================
 
-# for (obs in 1:length(obsdays)){
-#   wObs[obs] ~ dbinom(POWhite, round(whitePups[obsdays[obs]]))
-#   mObs[obs] ~ dbinom(POMoult, round(moultPups[obsdays[obs]]))
-# 
-# }
-
-  
 
   #################################################################
   # ONE CALL TO DBINOM FOR ALL OBSERVATIONS 
@@ -128,47 +107,84 @@ code <- nimbleCode({
   #===============
 
   #####################################################################
-  #model$whitePups[obsdays]*POWhite+model$moultPups[obsdays]*POMoult*(1-PCMoult)
-  
-  ## approximation of normal distribution with binomial variance
-  # for (obs in 1:length(obsdays)){
-  #   whiteCount[obs]<- whitePups[obsdays[obs]]*POWhite+moultPups[obsdays[obs]]*POMoult*(1-PCMoult)
-  #   vwhite[obs] <- pow(whitePups[obsdays[obs]]*POWhite*(1-POWhite),2) + pow(moultPups[obsdays[obs]]*(1-PCMoult)*POMoult*(1-(1-PCMoult)*POMoult),2)
-  #   sdwhite[obs] <- sqrt(vwhite[obs])
-  # 
-  #   moultCount[obs] <- moultPups[obsdays[obs]]*POMoult*PCMoult#+whitePups[obsdays[obs]]*POWhite*(1-PCWhite)
-  #   vmoult[obs] <- pow(moultPups[obsdays[obs]]*POMoult*PCMoult*(1-POMoult*PCMoult),2)#+pow(whitePups[obsdays[obs]]*POWhite*(1-PCWhite)*1-(POWhite*(1-PCWhite)))
-  #   sdmoult[obs] <- sqrt(vmoult[obs])
-  # 
-  #   wObs[obs] ~ dnorm(whiteCount[obs],sd=sdwhite[obs])
-  #   mObs[obs] ~ dnorm(moultCount[obs],sd=sdmoult[obs])
-  # }
+ # binomial variance formula
+  #N *p*(1-p)
+  # n (number of trials)* p(prob of success) * (1 - p) (prob of failure)
   for (obs in 1:length(obsdays)) {
-    whiteCount[obs] <- whitePups[obsdays[obs]] * POWhite + S4Pups[obsdays[obs]]*POWhite*PCWhiteS4 + moultPups[obsdays[obs]] * POMoult * (1 - PCMoult)
-    sdwhite[obs] <- sqrt(whitePups[obsdays[obs]] * POWhite * (1 - POWhite) + moultPups[obsdays[obs]] * (1 - PCMoult) * POMoult * (1 - (1 - PCMoult) * POMoult))
-
-    moultCount[obs] <- moultPups[obsdays[obs]] * POMoult * PCMoult
-    sdmoult[obs] <- sqrt(moultPups[obsdays[obs]] * POMoult * PCMoult * (1 - POMoult * PCMoult))
-
+    whiteCount[obs] <- whitePups[obsdays[obs]] * POWhite + moultPups[obsdays[obs]] * POMoult * (1 - PCMoult) + S4Pups[obsdays[obs]]*POWhite*PCWhiteS4
+    sdwhite[obs] <- sqrt(whitePups[obsdays[obs]] * POWhite * (1 - POWhite) + moultPups[obsdays[obs]] * (1 - PCMoult) * POMoult * (1 - (1 - PCMoult) * POMoult) +
+                           S4Pups[obsdays[obs]] * POWhite * PCWhiteS4 * (1 - POWhite*PCWhiteS4))
+    
+    moultCount[obs] <- moultPups[obsdays[obs]] * POMoult * PCMoult + S4Pups[obsdays[obs]]*POWhite*(1-PCWhiteS4)
+    sdmoult[obs] <- sqrt(moultPups[obsdays[obs]] * POMoult * PCMoult * (1 - POMoult * PCMoult)+ 
+                           S4Pups[obsdays[obs]]*(1-PCWhiteS4)*POWhite*(1 - (1-PCWhiteS4)*POWhite))
+    
     wObs[obs] ~ dnorm(whiteCount[obs], sd = sdwhite[obs])
     mObs[obs] ~ dnorm(moultCount[obs], sd = sdmoult[obs])
   }
+  
 
-
-  ## debug to check if issue is with binomial process
-  # for (obs in 1:length(obsdays)){
-  #   wObs[obs] ~ dnorm(whitePups[obsdays[obs]],sd=0.01) 
-  #   mObs[obs] ~ dnorm(moultPups[obsdays[obs]],sd=0.03)
+  # for (obs in 1:length(obsdays)) {
+  #   whiteCount[obs] <- whitePups[obsdays[obs]] * POWhite + moultPups[obsdays[obs]] * POMoult * (1 - PCMoult) +
+  #  # S4Pups[obsdays[obs]]*POWhite*PCWhiteS4
+  #   sdwhite[obs] <- sqrt(whitePups[obsdays[obs]] * POWhite * (1 - POWhite) + moultPups[obsdays[obs]] * POMoult * (1 - PCMoult)  * (1 - (1 - PCMoult) * POMoult)) #+
+  #   #S4Pups[obsdays[obs]] * POWhite * PCWhiteS4 * (1 - POWhite*PCWhiteS4))
   # 
+  #   moultCount[obs] <- moultPups[obsdays[obs]] * POMoult * PCMoult + S4Pups[obsdays[obs]] * POWhite * (1 - PCWhiteS4)
+  #   sdmoult[obs] <- sqrt(moultPups[obs] * POMoult * PCMoult * (1 - POMoult * PCMoult)) #+ S4Pups[obs]*POWhite*1-PCWhiteS4*1-(1-POWhite*(1-PCWhiteS4))) 
+  #   #sdmoult[obs] <- sqrt(moultPups[obsdays[obs]] * POMoult * PCMoult * (1 - POMoult * PCMoult) + S4Pups[obsdays[obs]] * (1- (1 - PCWhiteS4)*POWhite))
+  # 
+  #     wObs[obs] ~ dnorm(whiteCount[obs], sd = sdwhite[obs])
+  #     mObs[obs] ~ dnorm(moultCount[obs], sd = sdmoult[obs])
   # }
-  
+  # 
 
-  
-    })
+
+
+
+  # sdwhite[obs] <- sqrt(whiteObs[obs]*POWhite*PCWhiteS4*(1-POWhite*PCWhiteS4)+ moultObs[obs] * POMoult * (1 - PCMoult)  * (1 - (1 - PCMoult) * POMoult))
+  # sdmoult[obs] <- sqrt(moultObs[obs] * POMoult * PCMoult * (1 - POMoult * PCMoult) + whiteObs[obs]*POWhite*1-PCWhiteS4*1-(1-POWhite*(1-PCWhiteS4)))  
+
+  ### alt way 
+# 
+# whiteCount[1:ndays] <- whitePups[1:ndays]*POWhite
+# S4Count[1:ndays] <- S4Pups[1:ndays]*POWhite
+# moultCount[1:ndays] <- moultPups[1:ndays]*POMoult
+# 
+# 
+# # add imperfect classification
+# 
+# # S4 classified as white
+# S4W[1:ndays] <- S4Count[1:ndays]*PCWhiteS4
+# # white classified as white
+# WW[1:ndays] <- whiteCount[1:ndays] + S4W[1:ndays]
+# # white classified as moulted
+# WM[1:ndays] <- S4Count[1:ndays] - S4W[1:ndays]
+# # moulted classified as moulted
+# MM[1:ndays] <- moultCount[1:ndays]*PCMoult
+# # moulted classified as white
+# MW[1:ndays] <- moultCount[1:ndays] - MM[1:ndays]
+# 
+# for (obs in 1:length(obsdays)) {
+#   # Expected counts (adjusted for imperfect classification)
+#   whiteObs[obs] <- WW[obsdays[obs]] + MW[obsdays[obs]]
+#   moultObs[obs] <- MM[obsdays[obs]] + WM[obsdays[obs]]
+# 
+#   # Binomial standard deviation
+#   # binomial variance: N *p*(1-p)
+# 
+#   sdwhite[obs] <- sqrt(whiteObs[obs])
+#   sdmoult[obs] <- sqrt(moultObs[obs])
+# 
+#   wObs[obs] ~ dnorm(whiteObs[obs], sd = sdwhite[obs])
+#   mObs[obs] ~ dnorm(moultObs[obs], sd = sdmoult[obs])
+# }
+
+
+})
 
 ## supply data, constants and inits
-data_list=list(wObs=sim_S4$whiteObs,mObs=sim_S4$moultObs,
-               whiteObs=sim_S4$whiteObs,moultObs=sim_S4$moultObs)
+data_list=list(wObs=sim_S4$whiteObs,mObs=sim_S4$moultObs,moultObs=sim_S4$moultObs)
 
 constants_list=list(ndays=ndays,amax=amax,obsdays=obsdays,
                     # Parameters for the standard beta distribution
@@ -186,18 +202,18 @@ constants_list=list(ndays=ndays,amax=amax,obsdays=obsdays,
 
 inits_list <- list(Nborn=runif(1,500,510),
                    Pb=rep(0,ndays),PS4=rep(0,amax),Pm=rep(0,amax),Pl=rep(0,amax),
-                    start = runif(1,1,45),
-                    mu.bday=runif(1,20,60),
+                    start = runif(1,25,35),
+                    mu.bday=runif(1,35,50),
                     sd.bday= runif(1,7,12),
                     one=1,
-                    standard_beta=rbeta(1,2, 5) 
+                    standard_beta=rbeta(1,2,5) 
                    )
 ################
 model <- nimbleModel(code=code,inits=inits_list,data=data_list,
                     constants=constants_list,
                     dimensions=list(born=ndays,
                                     #whitePups=ndays,moultPups=ndays,
-                                # moultCount=length(obsdays), whiteCount=length(obsdays),
+                                #moultCount=length(obsdays), whiteCount=length(obsdays),
                     Pb_sum=ndays,PS4_sum=ndays,Pm_sum=ndays,Pl_sum=ndays))
                    
 nc <- 2   ;   ni <- 11000   ;   nb <- 1000   ;   nt <- 0
@@ -239,3 +255,15 @@ mcmc.out <-nimbleMCMC(model=model,nchains =nc,niter = ni, nburnin = nb,
  coda::gelman.diag(mcmc[,"Nborn"])
 # #look at trace plots
   plot(mcmc[,"Nborn"])
+  coda::gelman.diag(mcmc[,"mu.bday"])
+  # #look at trace plots
+  plot(mcmc[,"mu.bday"])
+  library(MCMCvis)
+  #trace and posterior density of params:
+  MCMCtrace(object = mcmc,
+            pdf = FALSE, 
+            ind = TRUE, # separate density lines per chain
+            Rhat=F,
+            n.eff=F,
+            params = "all")
+  
