@@ -11,11 +11,13 @@
 #source("HgNimble_input_S4.R") # Nimble functions to count whitecoat and moulted pups present on any given day
 
 code <- nimbleCode({
-  #priors
+   #priors
    #Nborn ~ dgamma(shape=500,scale=1) #Nborn (N)=500 in simulation
    Nborn ~ dgamma(shape=485, scale=1) 
-   start ~ dunif(25,35) # start is 32 in simulation
-   mu.bday ~ dunif(35,50)
+   # start ~ dunif(25,35) 
+   # mu.bday ~ dunif(35,50)
+   start ~ dunif(25,45)
+   mu.bday ~ dunif(20,60)
    #sd.bday ~ dunif(7,12) 
    #shifted scale beta for sd.bday
    # beta distribution
@@ -200,10 +202,11 @@ constants_list=list(ndays=ndays,amax=amax,obsdays=obsdays,
                     POWhite=POWhite,POMoult=POMoult,PCMoult=PCMoult,PCWhiteS4=PCWhiteS4)
 
 
+
 inits_list <- list(Nborn=runif(1,500,510),
                    Pb=rep(0,ndays),PS4=rep(0,amax),Pm=rep(0,amax),Pl=rep(0,amax),
-                    start = runif(1,25,35),
-                    mu.bday=runif(1,35,50),
+                   start = runif(1,25,45),
+                   mu.bday=runif(1,20,60),
                     sd.bday= runif(1,7,12),
                     one=1,
                     standard_beta=rbeta(1,2,5) 
