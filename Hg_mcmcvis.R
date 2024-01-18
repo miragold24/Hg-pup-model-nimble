@@ -8,7 +8,7 @@ library(MCMCvis)
 
 #Nborn
 
-
+#test git update
 Nborn.prior<-rgamma(10000,shape=485, scale=1)
 quantile(Nborn.prior)
 plot(density(Nborn.prior))
