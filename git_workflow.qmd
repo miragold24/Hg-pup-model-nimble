@@ -1,0 +1,48 @@
+---
+title: "Git workflow"
+format: html
+editor: visual
+---
+
+## Quarto
+
+1.  Always start from main. Never commit directly to main.
+
+    1.  `git checkout main` -- gets you to main on local machine
+
+    2.  `git pull`- pulls all content from cloud/origin
+
+2.  Create a new feature branch for a component of work.
+
+    1.  `git checkout -b "branch name"`   -- this will place you in a new branch locally. It does not exist in the cloud yet (watch out for underscore or spaces - may not like that).
+
+    2.  Make your edits! Do work. Commit significant changes as you go.
+
+        1.  `git add <filename>` -- . in place of filename is a catch all
+
+        2.  `git commit -m` "describe what you are committing"
+
+    3.  When ready, time to push this to origin/cloud to raise a PR (pull request) and merge to main.
+
+    4.  `git push` OR `git push --set-upstream origin <branch name>` -- This pushes your local branch to origin.
+
+3.  Navigate to github.com
+
+    1.  Go to your branch in the website
+
+    2.  Raise a PR
+
+    3.  Review and click merge
+
+    4.  Delete feature branch if you'd like
+
+\
+\
+
+Cheat sheet: 
+
+`git status` -- display what branch you are on and any files you've changed and could be staged for commit with \`git add .\`
+
+`git branch` - display all local branches 
+
+\
