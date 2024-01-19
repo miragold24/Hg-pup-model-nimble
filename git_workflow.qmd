@@ -4,7 +4,7 @@ format: html
 editor: visual
 ---
 
-## Quarto
+
 
 1.  Always start from main. Never commit directly to main.
 
