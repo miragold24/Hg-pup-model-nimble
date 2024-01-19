@@ -10,6 +10,8 @@
 #source("HgSim_S4.R")
 #source("HgNimble_input_S4.R") # Nimble functions to count whitecoat and moulted pups present on any given day
 
+# EXAMPLE
+
 code <- nimbleCode({
    #priors
    #Nborn ~ dgamma(shape=500,scale=1) #Nborn (N)=500 in simulation
