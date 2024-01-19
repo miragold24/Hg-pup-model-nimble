@@ -14,15 +14,18 @@ Table of Contents
 -----------------
 * Hg_mcmcvis.R
 * HgNimble_input_S3.R
+* HgNimble_Model_S4.R
 * HgNimble_Model_S3.R
+* HgNimble_Model_S4.R
 * HgSim_S3.R
+* HgSim_S4.R
 
 Setup
 -----
 
 * Unpacking instructions: n/a
 
-* Relationships between files/folders: Source HgSim_S3.R and HgNimble_input_S3.R to run HGNimble_Model_S3.R 
+* Relationships between files/folders: Source HgSim_S3.R and HgNimble_input_S3.R to run HGNimble_Model_S3.R.  Source HgSim_S4.R and HgNimble_input_S4.R to run HGNimble_Model_S4.R 
 
 * Recommended software/tools: RStudio 2022.07.1; R version 4.2.1 
 
@@ -76,6 +79,7 @@ Details for: HgSim_S3.R
 * Format(s): .R
 
 * Size(s): 6.2 KB
-
+---------------------------------------
+_S4.R files are the same as above but added stage 4 
 - - -
 END OF README
