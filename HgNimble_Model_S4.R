@@ -112,20 +112,8 @@ code <- nimbleCode({
  # binomial variance formula
   #N *p*(1-p)
   # n (number of trials)* p(prob of success) * (1 - p) (prob of failure)
-  for (obs in 1:length(obsdays)) {
-    whiteCount[obs] <- whitePups[obsdays[obs]] * POWhite + moultPups[obsdays[obs]] * POMoult * (1 - PCMoult) + S4Pups[obsdays[obs]]*POWhite*PCWhiteS4
-    sdwhite[obs] <- sqrt(whitePups[obsdays[obs]] * POWhite * (1 - POWhite) + moultPups[obsdays[obs]] * (1 - PCMoult) * POMoult * (1 - (1 - PCMoult) * POMoult) +
-                           S4Pups[obsdays[obs]] * POWhite * PCWhiteS4 * (1 - POWhite*PCWhiteS4))
-    
-    moultCount[obs] <- moultPups[obsdays[obs]] * POMoult * PCMoult + S4Pups[obsdays[obs]]*POWhite*(1-PCWhiteS4)
-    sdmoult[obs] <- sqrt(moultPups[obsdays[obs]] * POMoult * PCMoult * (1 - POMoult * PCMoult)+ 
-                           S4Pups[obsdays[obs]]*(1-PCWhiteS4)*POWhite*(1 - (1-PCWhiteS4)*POWhite))
-    
-    wObs[obs] ~ dnorm(whiteCount[obs], sd = sdwhite[obs])
-    mObs[obs] ~ dnorm(moultCount[obs], sd = sdmoult[obs])
-  }
-  
 
+  
   # for (obs in 1:length(obsdays)) {
   #   whiteCount[obs] <- whitePups[obsdays[obs]] * POWhite + moultPups[obsdays[obs]] * POMoult * (1 - PCMoult) +
   #  # S4Pups[obsdays[obs]]*POWhite*PCWhiteS4
