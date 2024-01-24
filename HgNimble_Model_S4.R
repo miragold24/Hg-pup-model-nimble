@@ -113,14 +113,14 @@ code <- nimbleCode({
   #N *p*(1-p)
   # n (number of trials)* p(prob of success) * (1 - p) (prob of failure)
   for (obs in 1:length(obsdays)) {
-    whiteCount[obs] <- whitePups[obsdays[obs]] * POWhite + moultPups[obsdays[obs]] * POMoult * (1 - PCMoult) + S4Pups[obsdays[obs]]*POWhite*PCWhiteS4
+    whiteCount[obs] <- whitePups[obsdays[obs]] * POWhite*PCWhite + moultPups[obsdays[obs]] * POMoult * (1 - PCMoult) + S4Pups[obsdays[obs]]*POWhite*PCWhiteS4
 
-    sdwhite[obs] <- sqrt(whitePups[obsdays[obs]] * POWhite * (1 - POWhite) + moultPups[obsdays[obs]] * (1 - PCMoult) * POMoult * (1 - (1 - PCMoult) * POMoult)+
+    sdwhite[obs] <- sqrt(whitePups[obsdays[obs]] * POWhite*PCWhite * (1 - POWhite*PCWhite) + moultPups[obsdays[obs]] * POMoult*(1 - PCMoult)* (1 - POMoult*(1 - PCMoult))+
       S4Pups[obsdays[obs]] * POWhite * PCWhiteS4 * (1 - POWhite*PCWhiteS4))
 
     moultCount[obs] <- moultPups[obsdays[obs]] * POMoult * PCMoult + S4Pups[obsdays[obs]]*POWhite*(1-PCWhiteS4)
     sdmoult[obs] <- sqrt(moultPups[obsdays[obs]] * POMoult * PCMoult * (1 - POMoult * PCMoult)+ 
-      S4Pups[obsdays[obs]]*(1-PCWhiteS4)*POWhite*(1 - (1-PCWhiteS4)*POWhite))
+      S4Pups[obsdays[obs]]*POWhite*(1-PCWhiteS4)*(1 - POWhite*(1-PCWhiteS4)))
 
     
     wObs[obs] ~ dnorm(whiteCount[obs], sd = sdwhite[obs])
@@ -182,19 +182,26 @@ params = c('Nborn','start','mu.bday', 'sd.bday')
  runMCMC(HgMCMC,niter=1)#set =1 bc with one calculation inits are used
  #& can diagnose there
  # # #compile the model object first for the MCMC to compile 
-# Cmodel<- compileNimble(model,showCompilerOutput = F)
-# CHgMCMC <- compileNimble(HgMCMC,project=Cmodel)
-# CHgMCMC$run(10000,reset=FALSE)
-# samples_update<- as.matrix(CHgMCMC$mvSamples)
-# plot(samples_update[ , 'Nborn'], type = 'l', xlab = 'iteration',  
-#      ylab = expression(Nborn))
-# mean(samples_update[,'Nborn'])
-# #samples<-runMCMC(CHgMCMC,niter=10000)
-#  print(system.time(CHgMCMC$run(10000)))
-#  samples<-as.matrix(CHgMCMC$mvSamples)
-#  mean(samples[,'Nborn']) 
- 
- 
+Cmodel<- compileNimble(model,showCompilerOutput = F)
+CHgMCMC <- compileNimble(HgMCMC,project=Cmodel)
+CHgMCMC$run(10000,reset=FALSE)
+samples_update<- as.matrix(CHgMCMC$mvSamples)
+plot(samples_update[ , 'sd.bday'], type = 'l', xlab = 'iteration',
+     ylab = expression(Nborn))
+mean(samples_update[,'Nborn'])
+Nborn_samples <- samples[, "Nborn"]
+plot(density(Nborn_samples))
+start_samples <- samples[, "start"]
+plot(density(start_samples))
+mu.bday_samples <- samples[, "mu.bday"]
+plot(density(mu.bday_samples))
+# Plot the density
+plot(density, xlab = "Nborn", ylab = "Density")
+#samples<-runMCMC(CHgMCMC,niter=10000)
+ print(system.time(CHgMCMC$run(10000)))
+ samples<-as.matrix(CHgMCMC$mvSamples)
+ mean(samples[,'Nborn'])
+
 #############
  #Run MCMC chains
 mcmc.out <-nimbleMCMC(model=model,nchains =nc,niter = ni, nburnin = nb,
