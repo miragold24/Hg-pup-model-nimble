@@ -177,7 +177,7 @@ inits_list <- list(Nborn=runif(1,500,510),
                    Pb=rep(0,ndays),Pm=rep(0,amax),Pl=rep(0,amax),
                     start = runif(1,1,45),
                     mu.bday=runif(1,20,60),
-                    sd.bday= runif(1,7,12),
+                    #sd.bday= runif(1,7,12),
                     one=1,
                     standard_beta=rbeta(1,2, 5) 
                    )

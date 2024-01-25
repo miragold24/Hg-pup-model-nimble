@@ -15,7 +15,7 @@ simSealsS4 <- function(N = 500,
    PCWhite = 1, 
    PCMoult = 0.82, PCMoultSD = 0.09, 
    PCWhiteS4 = 0.75, PCWhiteS4SD = 0.01,
-   obsdays = c(35,55, 60, 65, 70, 75, 80,85,90, 95,100,105,110),
+   obsdays = 1:123, #c(35,55, 60, 65, 70, 75, 80,85,90, 95,100,105,110),
    popproc = "detcont", #detcont = deterministic and continuous, option for "stocdis" - stochastic and discrete
    obsproc = "exact",seed=2024) {  
 
@@ -75,7 +75,7 @@ simSealsS4 <- function(N = 500,
           #calculate whitePups where no whitePups can leave
           whitePups[d]<- whitePups[d] + realBorn[i] * (1-sum(PS4[1:age])) *(1 - sum(Pm[1:age])) #* (1-sum(Pl[1:age]))
           S4Pups[d] <- S4Pups[d] + realBorn[i]  * sum(PS4[1:age])  * (1-sum(Pm[1:age])) 
-          moultPups[d] <- moultPups[d] + realBorn[i] * sum(Pm[1:age]) *(1-sum(Pl[1:age]))
+          moultPups[d] <- moultPups[d] + realBorn[i] * sum(Pm[1:age])*(1-sum(Pl[1:age]))
           # moultPups[d] <- moultPups[d] + realBorn[i] * sum(Pm[1:age]) * (1-sum(Pl[1:age]))
           # #moultPups1[d] <- moultPups[d] + realBorn[i] * sum(Pm[1:thisage]) * (1-sum(PmPl2$PlGivenm[1:thisage]))
 
