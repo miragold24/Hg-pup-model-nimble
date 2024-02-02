@@ -16,7 +16,7 @@ code <- nimbleCode({
    #priors
    #Nborn ~ dgamma(shape=500,scale=1) #Nborn (N)=500 in simulation
    Nborn ~ dgamma(shape=485, scale=1) 
-   #start ~ dunif(25,45)
+   start ~ dunif(25,45)
    mu.bday ~ dunif(20,60)
    #sd.bday ~ dunif(7,12) 
    #shifted scale beta for sd.bday
@@ -27,7 +27,7 @@ code <- nimbleCode({
    
    
   #constraints
-     #one ~ dconstraint(start < mu.bday)
+     one ~ dconstraint(start < mu.bday)
   # alt constraint - truncated normal for start
      #start ~ T(dnorm(0, 1), 0, mu.bday)
      #T(dnorm(0, 1), -15, mu.bday) #start is within 15 days of mu.bday
@@ -113,9 +113,9 @@ code <- nimbleCode({
   #N *p*(1-p)
   # n (number of trials)* p(prob of success) * (1 - p) (prob of failure)
   for (obs in 1:length(obsdays)) {
-    whiteCount[obs] <- whitePups[obsdays[obs]] * POWhite + moultPups[obsdays[obs]] * POMoult * (1 - PCMoult) + S4Pups[obsdays[obs]]*POWhite*PCWhiteS4
+    whiteCount[obs] <- whitePups[obsdays[obs]] * POWhite*PCWhite + moultPups[obsdays[obs]] * POMoult * (1 - PCMoult) + S4Pups[obsdays[obs]]*POWhite*PCWhiteS4
 
-    sdwhite[obs] <- sqrt(whitePups[obsdays[obs]] * POWhite * (1 - POWhite) + moultPups[obsdays[obs]] * POMoult*(1 - PCMoult)* (1 - POMoult*(1 - PCMoult))+
+    sdwhite[obs] <- sqrt(whitePups[obsdays[obs]] * POWhite*PCWhite * (1 - POWhite*PCWhite) + moultPups[obsdays[obs]] * POMoult*(1 - PCMoult)* (1 - POMoult*(1 - PCMoult))+
       S4Pups[obsdays[obs]] * POWhite * PCWhiteS4 * (1 - POWhite*PCWhiteS4))
 
     moultCount[obs] <- moultPups[obsdays[obs]] * POMoult * PCMoult + S4Pups[obsdays[obs]]*POWhite*(1-PCWhiteS4)
@@ -136,12 +136,12 @@ code <- nimbleCode({
 data_list=list(wObs=sim_S4$whiteObs,mObs=sim_S4$moultObs,moultObs=sim_S4$moultObs)
 
 constants_list=list(ndays=ndays,amax=amax,obsdays=obsdays,
-                    # # Parameters for the standard beta distribution
+                    # Parameters for the standard beta distribution
                     alpha=2 ,  # Shape parameter (alpha > 0)
                     beta=5,    # Shape parameter (beta > 0)
                     shift=7,   # Shift the distribution to start at 7
                     scale=5,   # Scale the distribution to end at 12 (12-7)
-                     start=start,
+                     #start=start,
                      #mu.bday=mu.bday,
                      #sd.bday=sd.bday, #params to be estimated
                     mu.mday=mu.mday,sd.mday=sd.mday,mu.lday=mu.lday,sd.lday=sd.lday,
@@ -152,10 +152,10 @@ constants_list=list(ndays=ndays,amax=amax,obsdays=obsdays,
 
 inits_list <- list(Nborn=runif(1,500,510),
                    Pb=rep(0,ndays),PS4=rep(0,amax),Pm=rep(0,amax),Pl=rep(0,amax),
-                   #start = runif(1,25,45),
+                   start = runif(1,25,45),
                    mu.bday=runif(1,20,60),
-                    #sd.bday= runif(1,7,12)
-                    #one=1
+                    sd.bday= runif(1,7,12),
+                    one=1,
                     standard_beta=rbeta(1,2,5) 
                    )
 ################
@@ -166,7 +166,7 @@ model <- nimbleModel(code=code,inits=inits_list,data=data_list,
                                 #moultCount=length(obsdays), whiteCount=length(obsdays),
                     Pb_sum=ndays,PS4_sum=ndays,Pm_sum=ndays,Pl_sum=ndays))
                    
-nc <- 2   ;   ni <- 21000   ;   nb <- 10000   ;   nt <- 0
+nc <- 2   ;   ni <- 11000   ;   nb <- 1000   ;   nt <- 0
  # Parameters monitored
                    
  #' params = c('cumsum_born','Nborn',
@@ -176,31 +176,31 @@ nc <- 2   ;   ni <- 21000   ;   nb <- 10000   ;   nt <- 0
  #'            #,'mm','mw',)
  #' )
 
-params = c('Nborn','mu.bday', 'sd.bday')
+params = c('Nborn','start','mu.bday', 'sd.bday')
  
  HgMCMC <- buildMCMC(model,monitors=params)
  runMCMC(HgMCMC,niter=1)#set =1 bc with one calculation inits are used
  #& can diagnose there
  # # #compile the model object first for the MCMC to compile 
-# Cmodel<- compileNimble(model,showCompilerOutput = F)
-# CHgMCMC <- compileNimble(HgMCMC,project=Cmodel)
-# CHgMCMC$run(10000,reset=FALSE)
-# samples_update<- as.matrix(CHgMCMC$mvSamples)
-# plot(samples_update[ , 'sd.bday'], type = 'l', xlab = 'iteration',
-#      ylab = expression(Nborn))
-# mean(samples_update[,'Nborn'])
-# Nborn_samples <- samples[, "Nborn"]
-# plot(density(Nborn_samples))
-# start_samples <- samples[, "start"]
-# plot(density(start_samples))
-# mu.bday_samples <- samples[, "mu.bday"]
-# plot(density(mu.bday_samples))
-# # Plot the density
-# plot(density, xlab = "Nborn", ylab = "Density")
+Cmodel<- compileNimble(model,showCompilerOutput = F)
+CHgMCMC <- compileNimble(HgMCMC,project=Cmodel)
+CHgMCMC$run(10000,reset=FALSE)
+samples_update<- as.matrix(CHgMCMC$mvSamples)
+plot(samples_update[ , 'sd.bday'], type = 'l', xlab = 'iteration',
+     ylab = expression(Nborn))
+mean(samples_update[,'Nborn'])
+Nborn_samples <- samples[, "Nborn"]
+plot(density(Nborn_samples))
+start_samples <- samples[, "start"]
+plot(density(start_samples))
+mu.bday_samples <- samples[, "mu.bday"]
+plot(density(mu.bday_samples))
+# Plot the density
+plot(density, xlab = "Nborn", ylab = "Density")
 #samples<-runMCMC(CHgMCMC,niter=10000)
- # print(system.time(CHgMCMC$run(10000)))
- # samples<-as.matrix(CHgMCMC$mvSamples)
- # mean(samples[,'Nborn'])
+ print(system.time(CHgMCMC$run(10000)))
+ samples<-as.matrix(CHgMCMC$mvSamples)
+ mean(samples[,'Nborn'])
 
 #############
  #Run MCMC chains
@@ -223,8 +223,4 @@ mcmc.out <-nimbleMCMC(model=model,nchains =nc,niter = ni, nburnin = nb,
             Rhat=F,
             n.eff=F,
             params = "all")
-  
-#pairwise plots for correlation?   
-# mcmc_pairs(mcmc, ~ Nborn + mu.bday)
-mcmc_pairs(mcmc, pars= c("Nborn","mu.bday","sd.bday"))
   
