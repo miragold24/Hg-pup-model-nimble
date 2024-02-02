@@ -1,7 +1,7 @@
 ### ===================
 ### HG sim with only 3 stages: whitecoat, moult, leave 
 ### ===================
-
+source("leaveFunction.R")
 simSealsS4 <- function(N = 500, 
    ndays = 123, amax = 123, 
    start = 32, mu.bday = 45, sd.bday = 10, 
@@ -15,7 +15,7 @@ simSealsS4 <- function(N = 500,
    PCWhite = 1, 
    PCMoult = 0.82, PCMoultSD = 0.09, 
    PCWhiteS4 = 0.75, PCWhiteS4SD = 0.01,
-   obsdays = c(35,55, 60, 65, 70, 75, 80,85,90, 95,100,105,110),
+   obsdays = 33:123,#c(35,55, 60, 65, 70, 75, 80,85,90, 95,100,105,110),
    popproc = "detcont", #detcont = deterministic and continuous, option for "stocdis" - stochastic and discrete
    obsproc = "exact",seed=2024) {  
 
@@ -41,9 +41,8 @@ simSealsS4 <- function(N = 500,
   
   PS4 <- rep(0, amax)
   
-  for (t in 1:amax){
-    PS4[t] <- pnorm(t, mu.s4day, sd.s4day) - pnorm(t-1, mu.s4day, sd.s4day)
-  }
+  ###  PS4 as function of age
+  PS4<- pnorm(1:amax, mu.s4day, sd.s4day) - pnorm(0:(amax - 1), mu.s4day, sd.s4day)
   
   PS4 <- PS4/sum(PS4)
   
@@ -52,10 +51,10 @@ simSealsS4 <- function(N = 500,
   #Ensure probabilities sum to 1
   Pm <- Pm / sum(Pm)
 
-  #Calculate probability of leaving as a function of age
-  Pl <- pnorm(1:amax, mu.lday, sd.lday) - pnorm(0:(amax - 1), mu.lday, sd.lday)
-  #Ensure probabilities sum to 1
-  Pl <- Pl / sum(Pl)
+  # #Calculate probability of leaving as a function of age
+  # Pl <- pnorm(1:amax, mu.lday, sd.lday) - pnorm(0:(amax - 1), mu.lday, sd.lday)
+  # #Ensure probabilities sum to 1
+  # Pl <- Pl / sum(Pl)
 
   # simulate perfect birth, moult, leave process
   if (popproc == "detcont"){
@@ -75,9 +74,8 @@ simSealsS4 <- function(N = 500,
           #calculate whitePups where no whitePups can leave
           whitePups[d]<- whitePups[d] + realBorn[i] * (1-sum(PS4[1:age])) *(1 - sum(Pm[1:age])) #* (1-sum(Pl[1:age]))
           S4Pups[d] <- S4Pups[d] + realBorn[i]  * sum(PS4[1:age])  * (1-sum(Pm[1:age])) 
-          moultPups[d] <- moultPups[d] + realBorn[i] * sum(Pm[1:age]) *(1-sum(Pl[1:age]))
-          # moultPups[d] <- moultPups[d] + realBorn[i] * sum(Pm[1:age]) * (1-sum(Pl[1:age]))
-          # #moultPups1[d] <- moultPups[d] + realBorn[i] * sum(Pm[1:thisage]) * (1-sum(PmPl2$PlGivenm[1:thisage]))
+          #moultPups[d] <- moultPups[d] + realBorn[i] * sum(Pm[1:age]) *(1-sum(Pl[1:age]))
+          moultPups[d] <- moultPups[d] + realBorn[i] * sum(Pm[1:age]) * (1-sum(PmPl2$PlGivenm[1:age]))
 
 
         } # end for i
@@ -177,6 +175,32 @@ simSealsS4 <- function(N = 500,
 
   }
   
+  
+  if (obsproc == "normappx"){
+    set.seed(seed)
+    
+    sdwhite <- sqrt(whitePups * POWhite * (1 - POWhite) + moultPups * (1 - PCMoult) * POMoult * (1 - (1 - PCMoult) * POMoult)) +
+      S4Pups * POWhite * PCWhiteS4 * (1 - POWhite*PCWhiteS4)
+    sdmoult <- sqrt(moultPups * POMoult * PCMoult * (1 - POMoult * PCMoult)) +
+      S4Pups*POWhite*(1-PCWhiteS4)*(1 - POWhite*(1-PCWhiteS4))
+    
+    whiteCount <- rnorm(n = length(whitePups), mean=whitePups * POWhite + 
+                          moultPups * POMoult * (1 - PCMoult)+ S4Pups*POWhite*PCWhiteS4, sd=sdwhite)
+    moultCount <- rnorm(n = length(moultPups), mean= moultPups * POMoult * PCMoult + 
+                          S4Pups*POWhite*(1-PCWhiteS4), sd=sdmoult)
+      
+
+  # white classified as white:
+  WW <- whiteCount
+  #No whitecoats misclassified as moulted
+  WM <- 0
+  # moulted classified as moulted
+  MM <- moultCount
+  # This is already acounted for in moultCount calculation for rnorm but needed for function to run
+  MW <- 0
+  
+  }
+    
   if (obsproc == "binom"){
     set.seed(seed)
     whiteCount <- rbinom(n = length(whitePups), size = round(whitePups), POWhite)
@@ -194,26 +218,7 @@ simSealsS4 <- function(N = 500,
 
   }
   
-  if (obsproc == "stoc_binom"){
-    set.seed(seed)
-    whiteCount <- rbinom(n = length(whitePups), size = whitePups, POWhite)
-    moultCount <- rbinom(n = length(moultPups), size = moultPups, POMoult)
-    # add in imperfect classification
-    # white classified as white
-    WW <- rbinom(n = length(whiteCount), size = whiteCount, PCWhite)
-    # white classified as moulted
-    WM <- round(whiteCount) - WW
-    # moulted classified as moulted
-    MM <- rbinom(n = length(moultCount), size = moultCount, PCMoult)
-    # moulted classified as white
-    MW <- round(moultCount) - MM  #correctly observed moulteds - correcty classified moulteds
-    
 
-  }
-  
-  # ### USE THIS FOR OBSERVATIONS WITH OBSERVATION ERROR ONLY (basic model)
-  # whiteObs <- whiteCount
-  # moultObs <- moultCount
   # # simulated observation data of white and moulted:
   whiteObs <- WW + MW
   moultObs <- MM + WM
@@ -223,7 +228,7 @@ simSealsS4 <- function(N = 500,
 
    
 
-  sim.out <- list( realBorn = realBorn, Pb = Pb,Pm = Pm, Pl = Pl, #totPups=totPups,
+  sim.out <- list( realBorn = realBorn, Pb = Pb,Pm = Pm, #totPups=totPups,
                   whiteCount=whiteCount,moultCount=moultCount,S4Count=S4Count, #Pw=Pw,Pm=Pm,
                   whiteObs = wObs, moultObs = mObs,#mleavers=mleavers,
                  whitePups=whitePups,S4Pups=S4Pups,moultPups=moultPups)
@@ -239,31 +244,5 @@ sim_S4<-simSealsS4()
 #sim_S3$whiteCount[obsdays]+sim_S3$moultCount[obsdays]
 #sim_S3$whiteObs+sim_S3$moultObs
 ####################################3
-#VISUALIZE 
 
-# #check plots are the same for realBorn (set.seed)
-# plot(sim_S3_binom$realBorn)
-# lines(sim_S3_binom$realBorn,lty=2,col='green')
-# 
-# plot(sim_S3_binom$whitePups)
-# lines(sim_S3_binom$moultPups,lty=2,col='red')
-# 
-# plot(sim_S3_exact$whiteCount)
-# lines(sim_S3_binom$whiteCount,lty=2,col='red')
-# sim_S3_exact$whiteCount[obsdays]
-# sim_S3_exact$whitePups[obsdays]
-# sim_S3_binom$whiteCount[obsdays]
-# 
-
-# 
-# ymax <- max(mleavers)
-# plot(whitePups, type = "l",ylim=c(0,500), ylab = "Count", 
-#      xlab = "Day of Season", main = "Counts based on leave|moulted",
-#      col = "darkgrey", lwd = 2)
-# #lines(whitePups, col = 'orange', lty = 2, lwd = 2)
-# #lines(moultPups1, col = 'purple', lwd = 2)
-# lines(moultPups, col = 'red', lty = 1, lwd = 2)
-# lines(mleavers, col = 'blue', lty = 1, lwd = 2)
-# legend("topleft", legend = c("White pups",  
-#                              "Moult pups (leave|moulted)","mleavers"), 
 #        lty = c(1, 1), col = c("darkgrey", "red","blue"), lwd = 2,bty = "n", cex = 0.8)
