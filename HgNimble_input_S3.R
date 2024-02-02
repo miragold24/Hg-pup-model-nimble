@@ -15,7 +15,7 @@ input_list = list(ndays = 123, amax=123,N=500,
                   PCWhite = 1, PCWhiteS4=0.75,
                   PCWhiteS4SD=0.01,
                   PCMoult = 0.82, PCMoultSD = 0.09,
-                  obsdays = c(35,55, 60, 65, 70, 75, 80,85,90, 95,100,105,110),
+                  obsdays = 33:123,#c(35,55, 60, 65, 70, 75, 80,85,90, 95,100,105,110),
                   seed=2024)
 thisenv <-environment()
 list2env(input_list, thisenv)
@@ -41,13 +41,12 @@ for(t in 2:ndays){
 whiteSum <- nimbleFunction(
   run = function(born=double(1),Pm_sum=double(1)){
     ndays=length(born)
-    obsdays=c(35,55, 60, 65, 70, 75, 80,85,90, 95,100,105,110)
+    obsdays=33:123#c(35,55, 60, 65, 70, 75, 80,85,90, 95,100,105,110)
     whitePups <- rep(0,ndays)
     for (d in 2:(ndays)){
       for (i in 1:d){
         age <- d-i
-        #whitePups[d] <-whitePups[d] + born[i] * (1 - sum(Pm_sum[1:age]))
-        whitePups[d] <- whitePups[d] + born[i] *(1 - sum(Pm_sum[1:age])) #* (1 - sum(Pl_sum[1:age]))
+        whitePups[d] <- whitePups[d] + born[i] *(1 - sum(Pm_sum[1:age])) # * (1 - sum(Pl_sum[1:age]))
       }
     }
     
@@ -65,28 +64,28 @@ whiteSum <- nimbleFunction(
 )
     
     
-    
-    S4Sum <- nimbleFunction(
-      run = function(born=double(1),PS4_sum=double(1),Pm_sum=double(1)){
-        ndays=length(born)
-        obsdays=c(35,55, 60, 65, 70, 75, 80,85,90, 95,100,105,110)
-        S4Pups <- rep(0,ndays)
-        for (d in 2:(ndays)){
-          for (i in 1:d){
-            age = d-i
-            S4Pups[d] <- S4Pups[d] + born[i]  * sum(PS4_sum[1:age])  * (1-sum(Pm_sum[1:age])) # * (1-sum(Pl_sum[1:age]))
-          }
-        }
-        returnType(double(1))
-        return(round(S4Pups))
-  }
-)
+     
+#     S4Sum <- nimbleFunction(
+#       run = function(born=double(1),PS4_sum=double(1),Pm_sum=double(1)){
+#         ndays=length(born)
+#         obsdays=c(35,55, 60, 65, 70, 75, 80,85,90, 95,100,105,110)
+#         S4Pups <- rep(0,ndays)
+#         for (d in 2:(ndays)){
+#           for (i in 1:d){
+#             age = d-i
+#             S4Pups[d] <- S4Pups[d] + born[i]  * sum(PS4_sum[1:age])  * (1-sum(Pm_sum[1:age]))  * (1-sum(Pl_sum[1:age]))
+#           }
+#         }
+#         returnType(double(1))
+#         return(S4Pups)
+#   }
+# )
 
 
 moultSum <- nimbleFunction(
-  run = function(born=double(1),Pm_sum=double(1),Pl_sum=double(1)){
+  run = function(born=double(1),Pm_sum=double(1),Pl_sum=double(1),moultObs=double(1)){
     ndays=length(born)
-    obsdays=c(35,55, 60, 65, 70, 75, 80,85,90, 95,100,105,110)
+    obsdays= 33:123#c(35,55, 60, 65, 70, 75, 80,85,90, 95,100,105,110)
     moultPups <- rep(0,ndays)
     for (d in 2:(ndays)){
       for (i in 1:d){
@@ -96,18 +95,34 @@ moultSum <- nimbleFunction(
     }
     
     #Constrain whitePups to be greater than wObs
-    # for (obs in 1:length(obsdays)){
-    #   if (moultPups[obsdays[obs]] <= moultObs[obs]) {
-    #     moultPups[obsdays[obs]] <- moultObs[obs] + 1  # Adjust whitePups to meet the constraint
-    #   }
-    # }
+    for (obs in 1:length(obsdays)){
+      if (moultPups[obsdays[obs]] <= moultObs[obs]) {
+        moultPups[obsdays[obs]] <- moultObs[obs] + 1  # Adjust whitePups to meet the constraint
+      }
+    }
     
     returnType(double(1))
     return(moultPups)
   }
 )
  #moultSumc <-compileNimble(moultSum)
-# 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 #   wCount <- nimbleFunction(
 #     run = function(whiteObs=double(1),ww=double(1),mw=double(1)){
 #     # whitePups <- numeric(value = 0, length = 123)
@@ -145,4 +160,31 @@ moultSum <- nimbleFunction(
 #       return(moultCount)
 #     }
 #   )
-  
+#   obs=1:123
+# wObs <- pnorm(model$whiteCount[obs] + 0.5, sd = model$sdwhite[obs]) - pnorm(model$whiteCount[obs] - 0.5, sd = model$sdwhite[obs])
+
+
+# #defining the discretized pdf as the area under the curve from x-0.5 to x+0.5.
+# dnormCDFw <- nimbleFunction(
+#   
+#   run = function(x = double(), mean = double(), sd = double(), log = integer(default = 0)) {
+#     ans <- pnorm(x + 0.5, mean = mean, sd = sd) - pnorm(x -0.5, mean = mean, sd = sd)
+#     if(log) return (log(ans))
+#     return(ans)
+#     returnType(double())
+#   }
+# )
+# 
+# 
+# registerDistributions(list(dnormCDFw = list(BUGSdist = "dnormCDFw(mean,sd)", range = c(0, 500))))
+# 
+# dnormCDFm <- nimbleFunction(
+#   
+#   run = function(x = double(), mean = double(), sd = double(), log = integer(default = 0)) {
+#     ans <- pnorm(x + 0.5, mean = mean, sd = sd) - pnorm(x-0.5, mean = mean, sd = sd)
+#     if(log) return (log(ans))
+#     return(ans)
+#     returnType(double())
+#   }
+# )
+# registerDistributions(list(dnormCDFm = list(BUGSdist = "dnormCDFm(mean,sd)", range = c(0, 500))))
