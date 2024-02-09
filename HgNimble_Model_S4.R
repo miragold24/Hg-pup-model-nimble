@@ -5,7 +5,8 @@
 ## load libraries, input data and functions
 #library(nimble)
 #library(MASS) 
-
+library(brms)
+library(coda)
 #getwd() 
 #source("HgSim_S4.R")
 #source("HgNimble_input_S4.R") # Nimble functions to count whitecoat and moulted pups present on any given day
@@ -18,6 +19,7 @@ code <- nimbleCode({
    Nborn ~ dgamma(shape=485, scale=1) 
    #start ~ dunif(25,45)
    mu.bday ~ dunif(33,60)
+   skew.bday ~ dunif(3,7)
    #sd.bday ~ dunif(7,12) 
    #shifted scale beta for sd.bday
    # beta distribution
@@ -36,19 +38,58 @@ code <- nimbleCode({
     born[t] <- Pb_sum[t]*Nborn
   }
   
-  
+  #=============================================================================
+  ### Calculate birth probabilities 
+   
+  ###
+  ### Log normal
   ###
   ### derived quantities for log scale calculations 
   ### 
-  lCV <- sd.bday/(mu.bday-start)
-  lsd <- sqrt(log(lCV^2+1))
-  lmu <- log(mu.bday-start)-(0.5*(lsd^2))
+  # lCV <- sd.bday/(mu.bday-start)
+  # lsd <- sqrt(log(lCV^2+1))
+  # lmu <- log(mu.bday-start)-(0.5*(lsd^2))
+  # 
+  # # Calculate probability of being born on any given day
+  # for(t in 2:ndays){
+  #   Pb[t] <- plnorm((t-start+1), lmu, lsd) - plnorm((t-start), lmu, lsd)
+  #   
+  # }
+  # 
+
+   ###
+   ### Skew normal
+   ###
+   #using BRMS package (not estimating mu.bday and sd.bday)
+   # for(t in 1:ndays){
+   #   Pb[t] <- pskew_normal(q = t+1, mu = mu.bday, sigma = sd.bday, alpha = skew.bday) -
+   #     pskew_normal(q = t, mu = mu.bday, sigma = sd.bday, alpha = skew.bday)
+   # }
+   # 
+   # 
+   # 
+   # 
+  # convert paramaters for skew normal
+   delta <- skew.bday/sqrt(1+(skew.bday^2)) #location
+   omega<-sqrt(sd.bday^2/(1-(2*delta^2)/pi)) #scaling factor
+   xi <- mu.bday - omega*delta*sqrt(2/pi) #skewness
+   # #x<- 1:123
+   
+   # #calculates Pb occurring at a certain point and
+   # #being less than or equal to that point
+   # #joint probability of a value being at (x - xi)/omega and
+   # #being less than or equal to skew.bday * ((x - xi)/omega)
+   #Pb_sum<- rep(0,ndays)
+   for (x in 1:ndays){
+     # next, calc the PDF of the skew normal (*scaling factor omega)
+     #at the point (x - xi) / omega
+     Pb[x]<- (2/omega)*dnorm((x-xi)/omega) *
+       #calc CDF up to the point skew.bday * ((x - xi)/omega)
+       pnorm(skew.bday*((x-xi)/omega))
+   }
+   
+ #==============================================================================
   
-  # Calculate probability of being born on any given day
-  for(t in 2:ndays){
-    Pb[t] <- plnorm((t-start+1), lmu, lsd) - plnorm((t-start), lmu, lsd)
-    
-  }
   Pb_sum[1:ndays] <- Pb[1:ndays]/sum(Pb[1:ndays])
   
 
@@ -61,13 +102,13 @@ code <- nimbleCode({
   
   
 
-  ###  PS4 as function of age
+  ###  PS4 as function of age (Probability of being S4)
   PS4[1:amax] <- pnorm(1:amax, mu.s4day, sd.s4day) - pnorm(0:(amax - 1), mu.s4day, sd.s4day)
     
   PS4_sum[1:amax] <- PS4[1:amax]/sum(PS4[1:amax])
   
 
-  # Probability of moulting as function of age
+  # Probability of moulting as function of age (Probability of finishing moult)
   Pm[1:amax] <- pnorm(1:amax, mu.mday, sd.mday) - pnorm(0:(amax - 1), mu.mday, sd.mday)
   #Ensure probabilities sum to 1
   Pm_sum[1:amax] <- Pm[1:amax]/sum(Pm[1:amax])
@@ -102,11 +143,11 @@ code <- nimbleCode({
 
     
     # normal approximation using binomial variance
-    # wObs[obs] ~ dnorm(whiteCount[obs], sd = sdwhite[obs])
-    # mObs[obs] ~ dnorm(moultCount[obs], sd = sdmoult[obs])
+    wObs[obs] ~ dnorm(whiteCount[obs], sd = sdwhite[obs])
+    mObs[obs] ~ dnorm(moultCount[obs], sd = sdmoult[obs])
     # obs ~ normal distribution using tiny variance (should get 500 pups when exact obs process):
-    wObs[obs] ~ dnorm(whiteCount[obs], sd = 0.0001)
-    mObs[obs] ~ dnorm(moultCount[obs], sd = 0.0001)
+    # wObs[obs] ~ dnorm(whiteCount[obs], sd = 0.001)
+    # mObs[obs] ~ dnorm(moultCount[obs], sd = 0.001)
 
      #==================================
      #LOG SUM EXP 
@@ -162,21 +203,23 @@ constants_list=list(ndays=ndays,amax=amax,obsdays=obsdays,
                     beta=5,    # Shape parameter (beta > 0)
                     shift=7,   # Shift the distribution to start at 7
                     scale=5,   # Scale the distribution to end at 12 (12-7)
-                     start=start,
-                     #mu.bday=mu.bday,
-                     #sd.bday=sd.bday, #params to be estimated
+                    #start=start,
+                    #skew.bday=skew.bday,
+                    #mu.bday=mu.bday,
+                    sigma=sd.bday,
+                    pi=pi,
+                    #sd.bday=sd.bday, #params to be estimated
                     mu.mday=mu.mday,sd.mday=sd.mday,mu.lday=mu.lday,sd.lday=sd.lday,
                     mu.s4day=mu.s4day,sd.s4day=sd.s4day,
                     POWhite=POWhite,POMoult=POMoult,PCMoult=PCMoult,PCWhiteS4=PCWhiteS4)
 
 
 
-inits_list <- list(Nborn=runif(1,500,560),a=rep(0,length(obsdays)),b=rep(0,length(obsdays)),
-                   e=rep(0,length(obsdays)),f=rep(0,length(obsdays)),
-                   Pb=rep(0,ndays),PS4=rep(0,amax),Pm=rep(0,amax),
+inits_list <- list(Nborn=runif(1,500,510),Pb=rep(0,ndays),
+                   Pb_sum=rep(0,ndays),PS4=rep(0,amax),Pm=rep(0,amax),
                    #start = runif(1,25,45),
-                   mu.bday=runif(1,33,60),
-                    sd.bday= runif(1,7,12),
+                    mu.bday=runif(1,33,60),
+                    #sd.bday= runif(1,7,12),
                     #one=1,
                     standard_beta=rbeta(1,2,5) 
                    )
@@ -184,11 +227,12 @@ inits_list <- list(Nborn=runif(1,500,560),a=rep(0,length(obsdays)),b=rep(0,lengt
 model <- nimbleModel(code=code,inits=inits_list,data=data_list,
                     constants=constants_list,
                     dimensions=list(born=ndays,
-                                    #whitePups=ndays,moultPups=ndays,
-                                #moultCount=length(obsdays), whiteCount=length(obsdays),
+                                #whitePups=ndays,moultPups=ndays,
+                                #moultCount=length(obsdays), 
+                                #whiteCount=length(obsdays),
                     Pb_sum=ndays,PS4_sum=ndays,Pm_sum=ndays))
                    
-nc <- 2   ;   ni <- 9000   ;   nb <- 1000   ;   nt <- 0
+nc <- 2   ;   ni <- 16000   ;   nb <- 5000   ;   nt <- 0
  # Parameters monitored
                    
  #' params = c('cumsum_born','Nborn',
@@ -198,7 +242,7 @@ nc <- 2   ;   ni <- 9000   ;   nb <- 1000   ;   nt <- 0
  #'            #,'mm','mw',)
  #' )
 
-params = c('Nborn','mu.bday', 'sd.bday')
+params = c('Nborn','mu.bday', 'sd.bday','skew.bday')
  
  HgMCMC <- buildMCMC(model,monitors=params)
  runMCMC(HgMCMC,niter=1)#set =1 bc with one calculation inits are used

@@ -5,7 +5,8 @@ source("leaveFunction.R")
 simSealsS4 <- function(N = 500, 
    ndays = 123, amax = 123, 
    start = 32, mu.bday = 45, sd.bday = 10, 
-   #mu.s4day = 17, sd.s4day = 5,
+   birthcurve = "skewnormal",
+   skew.bday = 5,
    mu.mlen = 6, sd.mlen = 2,
    mu.mday = 23, sd.mday = 5,
    mu.lday = 31.5, sd.lday = 7,
@@ -17,7 +18,7 @@ simSealsS4 <- function(N = 500,
    PCWhiteS4 = 0.75, PCWhiteS4SD = 0.01,
    obsdays = 33:123,#c(35,55, 60, 65, 70, 75, 80,85,90, 95,100,105,110),
    popproc = "detcont", #detcont = deterministic and continuous, option for "stocdis" - stochastic and discrete
-   obsproc = "exact",seed=2024) {  
+   obsproc = "normappx",seed=2024) {  
 
    library(lubridate)
 
@@ -25,7 +26,8 @@ simSealsS4 <- function(N = 500,
   # initialize matrices
 
   set.seed(seed)
-
+  
+  if(birthcurve == "lognormal"){
   # convert birth parameters for lognormal dist
   lCV <- sd.bday/(mu.bday-start)
   lsd <- sqrt(log(lCV^2+1))
@@ -36,8 +38,33 @@ simSealsS4 <- function(N = 500,
   
   for(t in 2:ndays){
     Pb[t] <- plnorm((t-start+1), lmu, lsd) - plnorm((t-start), lmu, lsd)
-  }
+    }
+  } #end if
+  
+  #===========================
+  if(birthcurve == "skewnormal"){
+  # convert paramaters for skew normal
+  delta <- skew.bday/sqrt(1+(skew.bday^2)) #location
+  omega<-sqrt(sd.bday^2/(1-(2*delta^2)/pi)) #scaling factor
+  xi <- mu.bday - omega*delta*sqrt(2/pi) #skewness
+  # #x<- 1:123
+  
+  # #calculates Pb occurring at a certain point and
+  # #being less than or equal to that point
+  # #joint probability of a value being at (x - xi)/omega and
+  # #being less than or equal to skew.bday * ((x - xi)/omega)
+  Pb<- rep(0,ndays)
+  for (x in 1:ndays){
+    # next, calc the PDF of the skew normal (*scaling factor omega)
+    #at the point (x - xi) / omega
+    Pb[x]<- (2/omega)*dnorm((x-xi)/omega) *
+      #calc CDF up to the point skew.bday * ((x - xi)/omega)
+      pnorm(skew.bday*((x-xi)/omega))
+    }
+  } # end if 
+  #==============================================================================
   Pb <- Pb / sum(Pb)
+  
   
   PS4 <- rep(0, amax)
   
@@ -229,7 +256,7 @@ simSealsS4 <- function(N = 500,
    
 
   sim.out <- list( realBorn = realBorn, Pb = Pb,Pm = Pm, #totPups=totPups,
-                  whiteCount=whiteCount,moultCount=moultCount,S4Count=S4Count, #Pw=Pw,Pm=Pm,
+                  whiteCount=whiteCount,moultCount=moultCount,#S4Count=S4Count, #Pw=Pw,Pm=Pm,
                   whiteObs = wObs, moultObs = mObs,#mleavers=mleavers,
                  whitePups=whitePups,S4Pups=S4Pups,moultPups=moultPups)
   list2env(sim.out, globalenv())

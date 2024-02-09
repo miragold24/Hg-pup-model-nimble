@@ -1,7 +1,7 @@
 
 ###==========================================
 ###
-### Input data & functions for HgNimble_V3.R
+### Input data & functions for HgNimble_Model_S4.R
 ###
 ###==========================================
 
