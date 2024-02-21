@@ -1,12 +1,13 @@
 ### ===================
-### HG sim with only 3 stages: whitecoat, moult, leave 
+### HG sim with only 3 proceses (no S4 before moult): whitecoat, moult, leave 
 ### ===================
-source("leaveFunction.R")
+
+source ("leaveFunction.R")
 simSealsS3 <- function(N = 500, 
    ndays = 123, amax = 123, 
-   start = 32, mu.bday = 45, sd.bday = 10, 
-   #mu.s4day = 17, sd.s4day = 5,
-   mu.mlen = 6, sd.mlen = 2,
+   start = 32, mu.bday = 45, sd.bday = 10,
+   birthcurve = "skewnormal",
+   skew.bday = 5, 
    mu.mday = 23, sd.mday = 5,
    mu.lday = 31.5, sd.lday = 7,
    POWhite = 0.98, POWhiteSD = 0.01,
@@ -14,38 +15,94 @@ simSealsS3 <- function(N = 500,
    PCWhite = 1, 
    PCMoult = 0.82, PCMoultSD = 0.09, 
    #PCWhiteS4 = 0.75, PCWhiteS4SD = 0.01,
-   obsdays = 33:123, #,c(35,55, 60, 65, 70, 75, 80,85,90, 95,100,105,110),
+   obsdays = c(35,55, 60, 65, 70, 75, 80,85,90, 95,100,105,110), #c(35, 40, 50, 65, 70, 80, 95)
    popproc = "detcont", #detcont = deterministic and continuous, option for "stocdis" - stochastic and discrete
    obsproc = "exact",seed=2024) {  
 
    library(lubridate)
 
-  #########
+
   # initialize matrices
 
   set.seed(seed)
-
-  # convert birth parameters for lognormal dist
-  lCV <- sd.bday/(mu.bday-start)
-  lsd <- sqrt(log(lCV^2+1))
-  lmu <- log(mu.bday-start)-(0.5*(lsd^2))
   
-  # calculate probability of being born on each day
-  Pb <- rep(0, ndays)
-  
-  for(t in 2:ndays){
-    Pb[t] <- plnorm((t-start+1), lmu, lsd) - plnorm((t-start), lmu, lsd)
+  if(birthcurve == "lognormal"){
+    
+    # convert birth parameters for lognormal dist
+    lCV <- sd.bday/(mu.bday-start)
+    lsd <- sqrt(log(lCV^2+1))
+    lmu <- log(mu.bday-start)-(0.5*(lsd^2))
+    
+    # calculate probability of being born on each day
+    Pb <- rep(0, ndays)
+    
+    for(t in 2:ndays){
+      Pb[t] <- plnorm((t-start+1), lmu, lsd) - plnorm((t-start), lmu, lsd)
+    }
+    
   }
-  Pb <- Pb / sum(Pb)
+  
+   if(birthcurve == "skewnormal"){
+     # alpha <-5
+     # # convert paramaters for skew normal
+     # delta <- skew.bday/sqrt(1+(skew.bday^2)) #location
+     # omega<-sqrt(sd.bday^2/(1-(2*delta^2)/pi)) #scaling factor
+     # xi <- mu.bday - omega*delta*sqrt(2/pi) #skewness
+     # # #x<- 1:123
+     # 
+     # 
+     # # function for PDF of skewnormal:
+     # PdfSkewNorm <- function(x, xi, omega, alpha){
+     #   (2/omega)*dnorm((x-xi)/omega) *
+     #     pnorm(alpha*((x-xi)/omega))
+     # }
+     # 
+     # 
+     # Pb<- PdfSkewNorm(x = 1:123, xi = xi,  omega = omega, alpha = alpha)
+     int <- 100
+     Pb <- integratePb(ndays,int,skew.bday,mu.bday,sd.bday)
+
+     Pb <- Pb/sum(Pb)
+     
+     
+     
+     
+     
+     
+    } 
+   
+
+  
+  # do the same by hand
+  #   pbornslices <- rep(NA, ndays*100)
+  #   slices <- seq(0, ndays, length.out = ndays*100)
+  #   start <- seq(0, length(pbornslices), by = 100)
+  #   # calculate pborn at each 100th of a day interval
+  #   for (i in 1:(ndays*100)){
+  #     
+  #     pbornslices[i] = 2/omega*dnorm(x = (slices[i] - xi)/omega, mean = 0, sd = 1)*pnorm(skew.bday*((slices[i]-xi)/omega))
+  #     
+  #   }
+  #   
+  #   
+  #   pborn <- rep(NA, ndays)
+  #   # add up the 100 slices for each day of the season
+  #   for(i in 1:ndays){
+  #     pborn[i] <- sum(pbornslices[start[i]:(start[i]+100)])
+  #   }
+  #   
+  #   Pb <- pborn/sum(pborn)
+  # } # end skewnormal birth curve
+ 
   # #Calculate probability of moulting as a function of age
   Pm <- pnorm(1:amax, mu.mday, sd.mday) - pnorm(0:(amax - 1), mu.mday, sd.mday)
   #Ensure probabilities sum to 1
   Pm <- Pm / sum(Pm)
 
-  #Calculate probability of leaving as a function of age
-  Pl <- pnorm(1:amax, mu.lday, sd.lday) - pnorm(0:(amax - 1), mu.lday, sd.lday)
-  #Ensure probabilities sum to 1
-  Pl <- Pl / sum(Pl)
+  # #Calculate probability of leaving as a function of age
+  # Pl <- pnorm(1:amax, mu.lday, sd.lday) - pnorm(0:(amax - 1), mu.lday, sd.lday)
+  # #Ensure probabilities sum to 1
+  # Pl <- Pl / sum(Pl)
 
   # simulate perfect birth, moult, leave process
   if (popproc == "detcont"){
@@ -58,10 +115,9 @@ simSealsS3 <- function(N = 500,
       for (d in 2:(ndays)){
         for (i in 1:d){
           age = d-i
-          #calculate whitePups where no whitePups can leave
-          whitePups[d]<- whitePups[d] + realBorn[i] * (1 - sum(Pm[1:age])) #* (1-sum(Pl[1:age]))
+          #calculate whitePups
+          whitePups[d]<- whitePups[d] + realBorn[i] * (1 - sum(Pm[1:age])) 
           # Calculate moultPups
-          #moultPups[d] <- moultPups[d] + realBorn[i] * sum(Pm[1:age]) *(1-sum(Pl[1:age]))
           moultPups[d] <- moultPups[d] + realBorn[i] * sum(Pm[1:age]) * (1-sum(PmPl2$PlGivenm[1:age]))
 
 
@@ -86,6 +142,9 @@ simSealsS3 <- function(N = 500,
     realMoult <- matrix(rep(0, ndays*amax), nrow = ndays, ncol = amax)
     realLeave <- matrix(nrow = ndays, ncol = amax)
     
+    
+      #realMoult[i, ] <- rbinom(amax, realBorn[i], Pm)
+
     for (i in 1:ndays){
       while(sum(realMoult[i,]) != sum(realBorn[i])){
         realMoult[i, ] <- rbinom(n = amax, size = realBorn[i], prob = Pm)
@@ -96,10 +155,15 @@ simSealsS3 <- function(N = 500,
           leavers[j, ] <- c(rep(0, j), rbinom(size = realMoult[i, j], prob = Pl, n = amax)[j:(amax-1)])
         } # end while
       } # end for j
+
       
+  
       realLeave[i,] <- colSums(leavers)
       
     } # end for i
+    
+    
+    
     
     # now count number of individuals per day
     
@@ -139,11 +203,12 @@ simSealsS3 <- function(N = 500,
     
   } # end if stocdisc 
   
-  if (obsproc == "exact"){
-    
+  
+   if (obsproc == "exact"){
+  # 
     whiteCount <- whitePups*POWhite
     moultCount <- moultPups*POMoult
-    
+
     # white classified as white:
     WW <- whiteCount*PCWhite
     #whitecoats classified as moulted is observed whitecoats - WW
@@ -153,21 +218,21 @@ simSealsS3 <- function(N = 500,
     # moulted classified as white
     MW <- moultCount - MM
 
-  }
-  
-
+   }
+  # # # 
+  # # # 
   if (obsproc == "normappx"){
     set.seed(seed)
 
 
     sdwhite <- sqrt(whitePups * POWhite * (1 - POWhite) + moultPups * (1 - PCMoult) * POMoult * (1 - (1 - PCMoult) * POMoult))
     sdmoult <- sqrt(moultPups * POMoult * PCMoult * (1 - POMoult * PCMoult))
-    
+
     whiteCount <- rnorm(n = length(whitePups), mean=whitePups * POWhite + moultPups * POMoult * (1 - PCMoult), sd=sdwhite)
     moultCount <- rnorm(n = length(moultPups), mean= moultPups * POMoult * PCMoult, sd=sdmoult)
-    
-    
-    # white classified as white:
+
+  # 
+  #   # white classified as white:
     WW <- whiteCount
     #No whitecoats misclassified as moulted
     WM <- 0
@@ -175,55 +240,89 @@ simSealsS3 <- function(N = 500,
     MM <- moultCount
     # This is already acounted for in moultCount calculation for rnorm but needed for function to run
     MW <- 0
- 
-  }
-  
-  if (obsproc == "binom"){
-    set.seed(seed)
-    whiteCount <- rbinom(n = length(whitePups), size = round(whitePups), POWhite)
-    moultCount <- rbinom(n = length(moultPups), size = round(moultPups), POMoult)
-    # add in imperfect classification
-    # white classified as white
-    WW <- rbinom(n = length(whiteCount), size = whiteCount, PCWhite)
-    # white classified as moulted
-    WM <- round(whiteCount) - WW
-    # moulted classified as moulted
-    MM <- rbinom(n = length(moultCount), size = moultCount, PCMoult)
-    # moulted classified as white
-    MW <- round(moultCount) - MM  #correctly observed moulteds - correcty classified moulteds
 
+     }
 
-  }
-  
-  if (obsproc == "stoc_binom"){
-    set.seed(seed)
-    whiteCount <- rbinom(n = length(whitePups), size = whitePups, POWhite)
-    moultCount <- rbinom(n = length(moultPups), size = moultPups, POMoult)
-    # add in imperfect classification
-    # white classified as white
-    WW <- rbinom(n = length(whiteCount), size = whiteCount, PCWhite)
-    # white classified as moulted
-    WM <- round(whiteCount) - WW
-    # moulted classified as moulted
-    MM <- rbinom(n = length(moultCount), size = moultCount, PCMoult)
-    # moulted classified as white
-    MW <- round(moultCount) - MM  #correctly observed moulteds - correcty classified moulteds
-    
-
-  }
-
-  # simulated observation data of white and moulted:
+  # if (obsproc == "binom"){
+  #   set.seed(seed)
+  #   whiteCount <- rbinom(n = length(whitePups), size = round(whitePups), POWhite)
+  #   moultCount <- rbinom(n = length(moultPups), size = round(moultPups), POMoult)
+  #   # add in imperfect classification
+  #   # white classified as white
+  #   WW <- rbinom(n = length(whiteCount), size = whiteCount, PCWhite)
+  #   # white classified as moulted
+  #   WM <- round(whiteCount) - WW
+  #   # moulted classified as moulted
+  #   MM <- rbinom(n = length(moultCount), size = moultCount, PCMoult)
+  #   # moulted classified as white
+  #   MW <- round(moultCount) - MM  #correctly observed moulteds - correcty classified moulteds
+  # 
+  #  }
+  # 
+  # # simulated observation data of white and moulted:
   whiteObs <- WW + MW
   moultObs <- MM + WM
 
   wObs <- whiteObs[obsdays]
   mObs <- moultObs[obsdays]
 
-   
+   ###########################################################################
+  # if (obsproc == "exact"){
+  # #
+  #   whiteObs <- whitePups*POWhite*PCWhite + moultPups*POMoult*(1-PCMoult)
+  #   moultObs <- moultPups*POMoult*PCMoult }
 
-  sim.out <- list( realBorn = realBorn, Pb = Pb,Pm = Pm, Pl = Pl, #totPups=totPups,
-                  whiteCount=whiteCount,moultCount=moultCount, #Pw=Pw,Pm=Pm,
-                  whiteObs = wObs, moultObs = mObs,#mleavers=mleavers,
+  # if (obsproc == "binom"){
+  #
+  #   whiteDetected <- rbinom(length(whitePups), whitePups, POWhite)
+  #   moultDetected <- rbinom(length(moultPups), moultPups, POMoult)
+  #
+  #   WW <- rbinom(length(whiteDetected), whiteDetected, PCWhite)
+  #   WM <- whiteDetected - WW
+  #   MM <- rbinom(length(moultDetected), moultDetected, PCMoult)
+  #   MW <- moultDetected - MM
+  #   whiteObs <- WW + MW
+  #   moultObs <- MM + WM
+  # #
+  #   }
+  # #
+  # if (obsproc == "normal"){
+  #   #binomial variance formula: Np*(1-p)
+  #   whiteDetectSD <- sqrt(whitePups*POWhite * (1-POWhite))
+  #   moultDetectSD <- sqrt(moultPups*POMoult* (1-POMoult))
+  # 
+  #   whiteDetect <- rnorm(length(whitePups),
+  #                        mean = whitePups*POWhite,
+  #                        sd = whiteDetectSD)
+  # 
+  #   moultDetect <- rnorm(length(moultPups),
+  #                        mean = moultPups*POMoult,
+  #                        sd = moultDetectSD)
+  # 
+  #   whiteClassSD <- sqrt(abs(whiteDetect)*PCWhite * (1-PCWhite))
+  #   moultClassSD <- sqrt(abs(moultDetect)*PCMoult * (1-PCMoult))
+  #   WW <- rnorm(length(whiteClassSD),
+  #               mean = whiteDetect*PCWhite,
+  #               sd = whiteClassSD)
+  #   WM <- whiteDetect - WW
+  #   MM <- rnorm(length(moultDetect),
+  #               mean = moultDetect*PCMoult,
+  #               sd = moultClassSD)
+  #   MW <- moultDetect - MM
+  # 
+  #   whiteObs <- abs(WW + MW)
+  #   moultObs <- abs(MM + WM)
+  # 
+  #  }
+  #
+  # # then subsample for observations on certain days
+
+# wObs <- whiteObs[obsdays]
+# mObs <- moultObs[obsdays]
+  #  
+
+  sim.out <- list( realBorn = realBorn, Pb = Pb,Pm = Pm,
+                   wObs = wObs, mObs = mObs,
                  whitePups=whitePups,moultPups=moultPups)
   list2env(sim.out, globalenv())
   return(sim.out)
