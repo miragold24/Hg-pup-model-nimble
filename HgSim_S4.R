@@ -7,7 +7,6 @@ simSealsS4 <- function(N = 500,
    start = 32, mu.bday = 45, sd.bday = 10, 
    birthcurve = "skewnormal",
    skew.bday = 5,
-   mu.mlen = 6, sd.mlen = 2,
    mu.mday = 23, sd.mday = 5,
    mu.lday = 31.5, sd.lday = 7,
    mu.s4day=17,sd.s4day=5,
@@ -17,8 +16,9 @@ simSealsS4 <- function(N = 500,
    PCMoult = 0.82, PCMoultSD = 0.09, 
    PCWhiteS4 = 0.75, PCWhiteS4SD = 0.01,
    obsdays = 33:123,#c(35,55, 60, 65, 70, 75, 80,85,90, 95,100,105,110),
-   popproc = "detcont", #detcont = deterministic and continuous, option for "stocdis" - stochastic and discrete
-   obsproc = "normappx",seed=2024) {  
+   popproc = "detcont", #detcont = deterministic and continuous, option for 
+   # "stocdis" - stochastic and discrete
+   obsproc = "exact",seed=2024) {  
 
    library(lubridate)
 
@@ -38,32 +38,54 @@ simSealsS4 <- function(N = 500,
   
   for(t in 2:ndays){
     Pb[t] <- plnorm((t-start+1), lmu, lsd) - plnorm((t-start), lmu, lsd)
-    }
+  }
   } #end if
   
   #===========================
   if(birthcurve == "skewnormal"){
-  # convert paramaters for skew normal
-  delta <- skew.bday/sqrt(1+(skew.bday^2)) #location
-  omega<-sqrt(sd.bday^2/(1-(2*delta^2)/pi)) #scaling factor
-  xi <- mu.bday - omega*delta*sqrt(2/pi) #skewness
-  # #x<- 1:123
+    
+    # convert paramaters for skew normal
+    # delta <- skew.bday/sqrt(1+(skew.bday^2)) #location
+    # omega<-sqrt(sd.bday^2/(1-(2*delta^2)/pi)) #scaling factor
+    # xi <- mu.bday - omega*delta*sqrt(2/pi) #skewness
+# 
+#   # calculates Pb occurring at a certain point and
+#   # being less than or equal to that point
+#   # PDF is prob of a value being at (x - xi)/omega and
+#   # being less than or equal to skew.bday * ((x - xi)/omega)
+#   Pb<- rep(0,ndays)
+#   for (x in 1:ndays){
+#     # next, calc the PDF of the skew normal (*scaling factor omega)
+#     #at the point (x - xi) / omega
+#     Pb[x]<- (2/omega)*dnorm((x-xi)/omega) *
+#       #calc CDF up to the point skew.bday * ((x - xi)/omega)
+#       pnorm(skew.bday*((x-xi)/omega))
+#
+#   }
   
-  # #calculates Pb occurring at a certain point and
-  # #being less than or equal to that point
-  # #joint probability of a value being at (x - xi)/omega and
-  # #being less than or equal to skew.bday * ((x - xi)/omega)
-  Pb<- rep(0,ndays)
-  for (x in 1:ndays){
-    # next, calc the PDF of the skew normal (*scaling factor omega)
-    #at the point (x - xi) / omega
-    Pb[x]<- (2/omega)*dnorm((x-xi)/omega) *
-      #calc CDF up to the point skew.bday * ((x - xi)/omega)
-      pnorm(skew.bday*((x-xi)/omega))
+  ###
+  ###Calculate Pb for each day by integrating over specific interval 
+  ###
+    ndays <- 123
+    nslice <- 1000
+    Pb <- rep(0, ndays)
+    for (i in 1:ndays){
+      for (j in 1:nslice){
+        dayslice <- i + (j/nslice)
+        Pb[i] <- Pb[i] + dskewnorm(dayslice, skew.bday, mu.bday, sd.bday)
+      }
     }
-  } # end if 
+    
+  #   
+  # int <- 100
+  # pborn <- integratePb(ndays,int,skew.bday,mu.bday,sd.bday)
+  
+  Pb <- Pb/sum(Pb)
+  } # end if
+  
+
   #==============================================================================
-  Pb <- Pb / sum(Pb)
+
   
   
   PS4 <- rep(0, amax)
@@ -92,16 +114,11 @@ simSealsS4 <- function(N = 500,
       S4Pups <- rep(0, ndays)
       moultPups <- rep(0, ndays)
 
-     # wleavers <- rep(0,ndays)
-      #mleavers <- rep(0,ndays)
-     # #totPups <- rep(0, ndays)
       for (d in 2:(ndays)){
         for (i in 1:d){
           age = d-i
-          #calculate whitePups where no whitePups can leave
-          whitePups[d]<- whitePups[d] + realBorn[i] * (1-sum(PS4[1:age])) *(1 - sum(Pm[1:age])) #* (1-sum(Pl[1:age]))
+          whitePups[d]<- whitePups[d] + realBorn[i] * (1-sum(PS4[1:age])) *(1 - sum(Pm[1:age])) 
           S4Pups[d] <- S4Pups[d] + realBorn[i]  * sum(PS4[1:age])  * (1-sum(Pm[1:age])) 
-          #moultPups[d] <- moultPups[d] + realBorn[i] * sum(Pm[1:age]) *(1-sum(Pl[1:age]))
           moultPups[d] <- moultPups[d] + realBorn[i] * sum(Pm[1:age]) * (1-sum(PmPl2$PlGivenm[1:age]))
 
 
@@ -179,15 +196,15 @@ simSealsS4 <- function(N = 500,
     
   } # end if stocdisc 
   
-  if (obsproc == "exact"){
-    
-    whiteCount <- whitePups*POWhite 
+    if (obsproc == "exact"){
+  # #   
+    whiteCount <- whitePups*POWhite
     S4Count <- S4Pups*POWhite
     moultCount <- moultPups*POMoult
-    
-    
+
+
     # add in imperfect classification
-    
+
     # S4 classified as white
     S4W <- S4Count*PCWhiteS4
     # white classified as white
@@ -198,66 +215,78 @@ simSealsS4 <- function(N = 500,
     MM <- moultCount*PCMoult
     # moulted classified as white
     MW <- moultCount - MM
-    
+
 
   }
-  
-  
+  # # 
+  # 
   if (obsproc == "normappx"){
     set.seed(seed)
+
+    sdwhite <- sqrt(whitePups * POWhite * (1 - POWhite) + 
+      moultPups * (1 - PCMoult) * POMoult * (1 - (1 - PCMoult) * POMoult) +
+      S4Pups * POWhite * PCWhiteS4 * (1 - POWhite*PCWhiteS4))
     
-    sdwhite <- sqrt(whitePups * POWhite * (1 - POWhite) + moultPups * (1 - PCMoult) * POMoult * (1 - (1 - PCMoult) * POMoult)) +
-      S4Pups * POWhite * PCWhiteS4 * (1 - POWhite*PCWhiteS4)
-    sdmoult <- sqrt(moultPups * POMoult * PCMoult * (1 - POMoult * PCMoult)) +
-      S4Pups*POWhite*(1-PCWhiteS4)*(1 - POWhite*(1-PCWhiteS4))
+    sdmoult <- sqrt(moultPups * POMoult * PCMoult * (1 - POMoult * PCMoult) +
+      S4Pups*POWhite*(1-PCWhiteS4)*(1 - POWhite*(1-PCWhiteS4)))
+
+    whiteCount <- rnorm(n = length(whitePups), mean=whitePups * POWhite +
+                          moultPups * POMoult * (1 - PCMoult)+ 
+                          S4Pups*POWhite*PCWhiteS4, sd=sdwhite)
     
-    whiteCount <- rnorm(n = length(whitePups), mean=whitePups * POWhite + 
-                          moultPups * POMoult * (1 - PCMoult)+ S4Pups*POWhite*PCWhiteS4, sd=sdwhite)
-    moultCount <- rnorm(n = length(moultPups), mean= moultPups * POMoult * PCMoult + 
+    moultCount <- rnorm(n = length(moultPups), mean= moultPups * POMoult * PCMoult +
                           S4Pups*POWhite*(1-PCWhiteS4), sd=sdmoult)
-      
-
-  # white classified as white:
-  WW <- whiteCount
-  #No whitecoats misclassified as moulted
-  WM <- 0
+  #     
+  # 
+  # # white classified as white:
+    WW <- whiteCount
+  #Axcounted for in whiteCount calculation for rnorm 
+    WM <- 0
   # moulted classified as moulted
-  MM <- moultCount
-  # This is already acounted for in moultCount calculation for rnorm but needed for function to run
-  MW <- 0
-  
-  }
-    
-  if (obsproc == "binom"){
-    set.seed(seed)
-    whiteCount <- rbinom(n = length(whitePups), size = round(whitePups), POWhite)
-    moultCount <- rbinom(n = length(moultPups), size = round(moultPups), POMoult)
-    # add in imperfect classification
-    # white classified as white
-    WW <- rbinom(n = length(whiteCount), size = whiteCount, PCWhite)
-    # white classified as moulted
-    WM <- round(whiteCount) - WW
-    # moulted classified as moulted
-    MM <- rbinom(n = length(moultCount), size = moultCount, PCMoult)
-    # moulted classified as white
-    MW <- round(moultCount) - MM  #correctly observed moulteds - correcty classified moulteds
-
+    MM <- moultCount
+  # Accounted for in moultCount calculation for rnorm
+    MW <- 0
 
   }
-  
-
-  # # simulated observation data of white and moulted:
+  #   
+  # if (obsproc == "binom"){
+  #   set.seed(seed)
+  #   whiteCount <- rbinom(n = length(whitePups), size = round(whitePups), POWhite)
+  #   moultCount <- rbinom(n = length(moultPups), size = round(moultPups), POMoult)
+  #   # add in imperfect classification
+  #   # white classified as white
+  #   WW <- rbinom(n = length(whiteCount), size = whiteCount, PCWhite)
+  #   # white classified as moulted
+  #   WM <- round(whiteCount) - WW
+  #   # moulted classified as moulted
+  #   MM <- rbinom(n = length(moultCount), size = moultCount, PCMoult)
+  #   # moulted classified as white
+  #   MW <- round(moultCount) - MM  #correctly observed moulteds - correcty classified moulteds
+  # 
+  # 
+  # }
+  # 
+  # 
+  # # # simulated observation data of white and moulted:
   whiteObs <- WW + MW
   moultObs <- MM + WM
-
+  # 
   wObs <- whiteObs[obsdays]
   mObs <- moultObs[obsdays]
+ 
+   # if (obsproc == "exact"){
+  # 
+  #   whiteObs <- whitePups*POWhite*PCWhite + moultPups*POMoult*(1-PCMoult)+
+  #     S4Pups*POWhite*PCWhiteS4
+  #   moultObs <- moultPups*POMoult*PCMoult +S4Pups*POWhite*(1-PCWhiteS4)}
 
-   
+
+  
 
   sim.out <- list( realBorn = realBorn, Pb = Pb,Pm = Pm, #totPups=totPups,
-                  whiteCount=whiteCount,moultCount=moultCount,#S4Count=S4Count, #Pw=Pw,Pm=Pm,
-                  whiteObs = wObs, moultObs = mObs,#mleavers=mleavers,
+                  #whiteCount=whiteCount,moultCount=moultCount,#S4Count=S4Count, #Pw=Pw,Pm=Pm,
+                  whiteObs = whiteObs, moultObs = moultObs,
+                  wObs = wObs, mObs = mObs,
                  whitePups=whitePups,S4Pups=S4Pups,moultPups=moultPups)
   list2env(sim.out, globalenv())
   return(sim.out)
@@ -272,4 +301,3 @@ sim_S4<-simSealsS4()
 #sim_S3$whiteObs+sim_S3$moultObs
 ####################################3
 
-#        lty = c(1, 1), col = c("darkgrey", "red","blue"), lwd = 2,bty = "n", cex = 0.8)
