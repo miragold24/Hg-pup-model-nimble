@@ -1,5 +1,6 @@
 ### ===================
 ### HG pup simulation with 4 stages: whitecoat, moulting (S4) moulted, leave 
+### options for various observation processes
 ### ===================
 
 input_list = list(ndays = 123, amax=123,N=500, mu.bday = 45, sd.bday = 10,
