@@ -70,26 +70,8 @@ code <- nimbleCode({
   #=============================================================================
   ### Calculate birth probabilities 
 
-   ###
-   ### Skew normal
-   ###
-  
-   # convert paramaters for skew normal
-   # delta <- skew.bday/sqrt(1+(skew.bday^2)) #location
-   # omega<-sqrt(sd.bday^2/(1-(2*delta^2)/pi)) #scale
-   # xi <- mu.bday - omega*delta*sqrt(2/pi) #shape
-
-   # #calculate PDF of skew normal
-   # for (x in 1:ndays){
-   #   # next, calc the PDF of the skew normal (*scaling factor omega)
-   #   #at (x - xi) / omega
-   #   Pb[x]<- (2/omega)*dnorm((x-xi)/omega) *
-   #     #calc CDF up to the point skew.bday * ((x - xi)/omega)
-   #     pnorm(skew.bday*((x-xi)/omega))
-   # }
 
   #calculate PDF of skew normal then integrate over intervals for Pb on given day
-     #Pb[1:ndays]<- slicePb(ndays,nslice,skew.bday,mu.bday,sd.bday) # using EJ method
      Pb[1:ndays] <- int_pb(ndays, skew.bday, mu.bday, sd.bday)
 
  #==============================================================================
@@ -129,12 +111,10 @@ code <- nimbleCode({
   #=================================================================
   # OBSERVATION PROCESS
   #=================================================================
-  #sum of binomials
+  # binomial with obs error only 
   # for (obs in 1:length(obsdays)) {
-  #   wObs[obs] <- dbinom(round(whitePups[obsdays[obs]] + S4Pups[obsdays[obs]]), prob = POWhite) * PCWhite + 
-  #     dbinom(round(moultPups[obsdays[obs]]),  prob = POMoult) * (1 - PCMoult)
-  #   mObs[obs] <- dbinom(round(whitePups[obsdays[obs]] + S4Pups[obsdays[obs]]), prob = POWhite) * (1 - PCWhite) + 
-  #     dbinom(round(moultPups[obsdays[obs]]),  prob = POMoult) * PCMoult
+  #   wObs[obs] <- dbinom(round(whitePups[obsdays[obs]] + S4Pups[obsdays[obs]]), prob = POWhite)
+  #   mObs[obs] <- dbinom(round(whitePups[obsdays[obs]] + S4Pups[obsdays[obs]]), prob = POWhite) 
   # }
   
 
@@ -311,22 +291,23 @@ GV <- c(500, 45, 10,5)
  #Run MCMC chains
 # mcmc.out <-nimbleMCMC(model=model,nchains =nc,niter = ni, nburnin = nb,
 #                   monitors = params, samplesAsCodaMCMC = TRUE,summary=TRUE)
-# # #                    
-# #                    # check convergence and look at plots 
- #mcmcS4<-mcmc.out$samples
+ 
+## check convergence and look at plots 
+# mcmcS4<-mcmc.out$samples
 # mcmcs4allobs<-mcmc.out$samples
 #  coda::gelman.diag(mcmcS4[,"Nborn"])
 # # #look at trace plots
 #   plot(mcmcS4[,"Nborn"])
 #   coda::gelman.diag(mcmc[,"mu.bday"])
-#   # #look at trace plots
+##  look at trace plots
 #   plot(mcmcS4[,"mu.bday"])
-#  library(MCMCvis)
- #coda::gelman.diag(mcmcS4[,"mu.bday"])
-  #trace and posterior density of params:
+#   library(MCMCvis)
+# coda::gelman.diag(mcmcS4[,"mu.bday"])
+
+ #trace and posterior density of params:
  
  # generating values for each parameter used to simulate data
- #GV <- c(500, 45, 10,5)
+# GV <- c(500, 45, 10,5)
 #   MCMCtrace(object = mcmcs4allobs,
 #             pdf = FALSE, 
 #             ind = TRUE, # separate density lines per chain
@@ -337,18 +318,18 @@ GV <- c(500, 45, 10,5)
 #             params = "all")
 #   
 # MCMCsummary(mcmcs4allobs,params="all")
- par(mfrow=c(1,1))
+# par(mfrow=c(1,1))
 # Define colorblind-friendly palette
-cbPalette <- c("#E69F00", "#cc8400", "#56B4E9","#3c7da3")
-# Plot the lines for whitePups and S4Pups
-plot(model$whitePups + S4Pups, typ = 'l', col = cbPalette[1],lwd=2, ylab = '# pups', xlab = 'day of season', main = 'Present on colony vs observed pups')
-lines(model$moultPups, col = cbPalette[3],lwd=2)
-
-# Add points for whiteCount and moultCount on observation days
-#obsdays <- c(35, 50, 75, 90, 105, 120)
-points(x = obsdays, y = model$whiteCount, col = "#cc8400", pch = 19)
-points(x = obsdays, y = model$moultCount, col = "#3c7da3", pch = 19)
-
-# Create legend with points
-legend("topright", legend = c("White present", "White observed", "Moult present", "Moult observed"), col = cbPalette, lty = c(1,NA,1,NA), lwd=2, pch = c(NA, 19, NA, 19))
+# cbPalette <- c("#E69F00", "#cc8400", "#56B4E9","#3c7da3")
+# # Plot the lines for whitePups and S4Pups
+# plot(model$whitePups + S4Pups, typ = 'l', col = cbPalette[1],lwd=2, ylab = '# pups', xlab = 'day of season', main = 'Present on colony vs observed pups')
+# lines(model$moultPups, col = cbPalette[3],lwd=2)
+# 
+# # Add points for whiteCount and moultCount on observation days
+# #obsdays <- c(35, 50, 75, 90, 105, 120)
+# points(x = obsdays, y = model$whiteCount, col = "#cc8400", pch = 19)
+# points(x = obsdays, y = model$moultCount, col = "#3c7da3", pch = 19)
+# 
+## Create legend with points
+# legend("topright", legend = c("White present", "White observed", "Moult present", "Moult observed"), col = cbPalette, lty = c(1,NA,1,NA), lwd=2, pch = c(NA, 19, NA, 19))
 
