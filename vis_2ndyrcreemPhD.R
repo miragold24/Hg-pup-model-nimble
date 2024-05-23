@@ -1,4 +1,4 @@
-### visualizations for 2nd yr creem PhD talks
+### visualizations for talks
 
 
 #check simulation: stocdis, norm appx before source
