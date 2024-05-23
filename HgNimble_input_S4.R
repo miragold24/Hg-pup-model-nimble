@@ -169,25 +169,3 @@ moultSum <- nimbleFunction(
 
 
 
-### 2) (EJ METHOD)
-# # now need to make this a cdf and make sure it matches
-# slice <-  function(ndays,nslice,skew.bday,mu.bday,sd.bday) {
-#   ndays <- 123
-#   nslice <- 1000
-#   Pb <- rep(0, ndays)
-#   for (i in 1:ndays){
-#     for (j in 1:nslice){
-#       dayslice <- i + (j/nslice)
-#       Pb[i] <- Pb[i] + dskewnorm(dayslice, skew.bday, mu.bday, sd.bday)
-#     }
-#   }
-#   return(Pb)
-# }
-# 
-# 
-# #Pb<-pborn/sum(pborn)
-# slicePb<-nimbleRcall(function(ndays=double(0),nslice=double(0),skew.bday=integer(),mu.bday=integer(),sd.bday=integer()){},Rfun ="slice",
-#                      returnType=double(1))
-# #compileNimble(slicePb)
-
-
