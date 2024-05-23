@@ -1,0 +1,110 @@
+
+
+    
+model{
+
+  # Define priors for parameters
+  mu.bday ~ dunif(0, ndays)       ## Prior for mean of birth distribution
+  skew.bday ~ dunif(0, ndays)     ## Prior for skewness of birth distribution
+  sd.bday ~ dunif(0, ndays)       ## Prior for standard deviation of birth distribution
+  scale ~ dunif(0, 200)           ## Prior for scale parameter
+
+  # Calculate probabilities for birth, moult, and leave events
+  for(i in 1:ndays) {
+    Pb[i] <- pnorm(i, mu.bday, sd.bday) - pnorm(i-1, mu.bday, sd.bday) ## Birth probability
+  }
+
+  # Pb[1:ndays]<- integratePb(ndays, skew.bday, mu.bday, sd.bday)
+  # Pb[1:ndays] <- dskew(x=1:ndays,param=c(skew.bday,mu.bday,sd.bday)) ## Birth probability
+  # mu.sday ~ dunif(0, ndays)       ## Prior for mean of stage 4 distribution
+  # sd.sday ~ dunif(0, ndays)       ## Prior for standard deviation of stage 4 distribution
+  Ps[1:amax] <- pnorm(1:amax, mu.sday, sd.sday) - pnorm(0:(amax-1), mu.sday, sd.sday) ## Probability of transitioning to stage 4
+  # mu.mday ~ dunif(0, ndays)       ## Prior for mean of moult distribution
+  # sd.mday ~ dunif(0, ndays)       ## Prior for standard deviation of moult distribution
+  Pm[1:amax] <- pnorm(1:amax, mu.mday, sd.mday) - pnorm(0:(amax-1), mu.mday, sd.mday) ## Probability of moult
+  # mu.lday ~ dunif(0, ndays)       ## Prior for mean of leave distribution
+  # sd.lday ~ dunif(0, ndays)       ## Prior for standard deviation of leave distribution
+  Pl[1:amax] <- pnorm(1:amax, mu.lday, sd.lday) - pnorm(0:(amax-1), mu.lday, sd.lday) ## Probability of leaving
+  # Prior distributions for other parameters
+  # POWhite ~ dunif(0.7, 1)
+  # POMoult ~ dunif(0.7, 1)
+  # PCMoult ~ dunif(0.7, 1)
+  # PCStge4 ~ dunif(0.7, 1)
+  # # Set constraints
+  # cons[1] ~ dconstraint(mu.sday < mu.mday) ## Ensure stage 4 comes before moult
+  # cons[2] ~ dconstraint(mu.mday < mu.lday) ## Ensure moult comes before leaving
+
+
+
+  # Define the dynamic model
+  # The number of pups born on day t follows a Poisson distribution.
+  # The lambda parameter (mean) of the Poisson distribution is determined by the 
+  # scale parameter multiplied by the birth probability for that day.
+  # 'scale' is a parameter representing the scale of the Poisson distribution.
+  # 'Pb[t]' is the birth probability for day t, calculated previously based on the model.
+  # 'white[t,1]' is the number of white creatures born on day t.
+  for(t in 1:ndays) {
+    white[t,1] ~ dpois(scale * Pb[t])    ## Birth process
+    
+    # Initialize pups for each state
+    stge4[t,1] <- 0                        ## Initialize stage 4 population for the day to 0
+    moult[t,1] <- 0                        ## Initialize moult population for the day to 0
+    leave[1,1] <- 0                        ## Initialize leave population for the day to 0
+
+    # Calculate daily aggregates
+    bornDaily[t] <- white[t,1]             ## Store the number of white born on the day
+    whiteDaily[t] <- sum(white[t,1:t])     ## Calculate the total white count up to this day
+    stge4Daily[t] <- sum(stge4[t,1:t])     ## Calculate the total stage 4 count up to this day
+    moultDaily[t] <- sum(moult[t,1:t])     ## Calculate the total moult count up to this day
+    leaveDaily[t] <- sum(leave[t,1:t])     ## Calculate the total leave count up to this day
+  }
+  
+
+  #############################################################################
+  # STORE NUMBER OF PUPS TRANSITIONING FROM ONE STATE TO ANOTHER -> STORE TOTAL 
+  # NUMBER OF PUPS PRESENT IN COLONY IN EACH CLASS AT AGE A ON DAY T
+  #no single parameter can update alone, without other numbers changing as well; 
+  #############################################################################
+  # Loop through each day (except the last one) and each possible age from 1 
+  # to the minimum value of t and amax (except the last)
+
+  for(t in 1:(ndays-1)) {
+    for(a in 1:min(t,amax-1)) {
+      # Transition probabilities from one state to another
+      # For each combination of day and age, simulate transitions between
+      # different states (white->stage 4->moult->leave) based on transition probabilities above.
+
+      white_s[t,a] ~ dbinom(Ps[a], white[t,a])   # the number of white pups (of age a) which transition to stage4 on day t
+      stge4_m[t,a] ~ dbinom(Pm[a], stge4[t,a])   # the number of stage4 pups (of age a) which transition to moulted on day t
+      moult_l[t,a] ~ dbinom(Pl[a], moult[t,a])   # the number of moulted pups (of age a) which leave the colony on day t
+
+      # Update counts based on transitions
+      white[t+1,a+1] <- white[t,a] - white_s[t,a]   # total number of white pups present in the colony, of age a on day t
+      stge4[t+1,a+1] <- stge4[t,a] - stge4_m[t,a] + white_s[t,a]  # total number of stage4 pups present in the colony, of age a on day t
+      moult[t+1,a+1] <- moult[t,a] - moult_l[t,a] + stge4_m[t,a]  # total number of moulted pups present in the colony, of age a on day t
+      leave[t+1,a+1] <- moult_l[t,a]                # total number of pup that leave the colony, of age a on day t
+    }
+  }
+
+  # Calculate total births and leaves
+  bornTotal  <- sum(bornDaily[1:ndays])    ## Total births calculated by summing daily births
+  leaveTotal <- sum(leaveDaily[1:ndays])   ## Total leaves calculated by summing daily leaves
+  
+  # Model observations
+
+
+  for(i in 1:length(obsdays)) {
+    # Calculate mean and variance for white and moulted pups
+    whiteM[i] <- whiteDaily[obsdays[i]] * POWhite + stge4Daily[obsdays[i]] * POWhite * PCStge4 + moultDaily[obsdays[i]] * POMoult * (1 - PCMoult)
+    whiteV[i] <- whiteDaily[obsdays[i]] * POWhite * (1 - POWhite) + stge4Daily[obsdays[i]] * POWhite * PCStge4 * (1 - POWhite * PCStge4) + moultDaily[obsdays[i]] * POMoult * (1 - PCMoult) * (1 - POMoult * (1 - PCMoult))
+    whiteS[i] <- max(sqrt(whiteV[i]), 0.00000001)
+    moultM[i] <- stge4Daily[obsdays[i]] * POWhite * (1 - PCStge4) + moultDaily[obsdays[i]] * POMoult * PCMoult
+    moultV[i] <- stge4Daily[obsdays[i]] * POWhite * (1 - PCStge4) * (1 - POWhite * (1 - PCStge4)) + moultDaily[obsdays[i]] * POMoult * PCMoult * (1 - POMoult * PCMoult)
+    moultS[i] <- max(sqrt(moultV[i]), 0.00000001)
+    # Model observations with normal distribution
+  # tau_w <- 1/(whiteS[i]*whiteS[i])
+  # tau_m <- 1/(moultS[i]*moultS[i])
+  wObs[i] ~ dnorm(whiteM[i], 1/0.001)
+  mObs[i] ~ dnorm(moultM[i], 1/0.001)
+  }
+}
