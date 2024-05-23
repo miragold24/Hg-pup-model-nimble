@@ -102,6 +102,11 @@ plot(density(mubday.prior), main = paste("mu.bday prior (shift =", shift.m, ", s
 plot(density(skew.prior), main = paste("skew.bday prior (shift =", shift.s, ", scale =", scale.s, ", alpha =", alpha.s, ", beta =", beta.s, ")", sep = ""))
 ##mcmc output 
 mcmc<-mcmc.out$samples
+
+#Pair plots to check correlation:
+
+mcmc_pairs(mcmc)
+
 #coda::gelman.diag(mcmc[,"sd.bday"])
 #look at trace plots
 #plot(mcmc[,"Nborn"])
@@ -150,13 +155,6 @@ sd.bday.samples<-  c(samples$chain1[,'sd.bday'],
                      samples$chain2[,'sd.bday'])
 mean(sd.bday.samples)
 
-###########################################
-
-#Pair plots to check correlation:
-
-mcmc_pairs(mcmc)
-
-##########################################
 
 #stochastic model visualizaiton: 
 # what is best distribution for births of pups over season?
