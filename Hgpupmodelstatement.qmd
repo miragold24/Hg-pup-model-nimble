@@ -1,0 +1,98 @@
+---
+title: "Hg model statement"
+format: html
+editor: visual
+---
+
+
+
+If we assume that the observations $( y_{1:T} = y_1, \ldots, y_T)$ for each location are conditionally independent, we can write the observation model for all locations $( 1:T)$ as:
+
+$[y_{1:T} | p,pc_j, z_{1:S}] = \prod_{i=1}^{T} [y_i | p, pc_j, z_i]$
+
+
+
+
+## Hierarchical Bayesian model:
+
+$[y|z_{1:S},\theta]$ is a model where $y$ is two types of observed data that depend on process states $z_{1:S}$ and parameters $\theta$.
+
+The posterior distribution conditioned on that data can be written as:
+
+$[z_{1:S}, \theta \mid y] = \frac{[y \mid z_{1:S}, \theta] \times [z_{1:S} \mid \theta] \times [\theta]}{[y]}$
+
+
+
+
+## Writing the joint distribution:
+
+$\theta$ is the set of parameters :
+
+-   $z_{1:S}$: age states
+
+-   $pc_j$: classification error across locations
+-   $p$: observation error
+-   $\phi$: a probability function to describe the birth rate
+-   $\Omega_{1:S}$: a probability function to describe the transition rates of each age state $z_{1:S}$
+
+The joint distribution can then be written as: 
+
+$[y_{d},\theta] = [y_{d},z_{1:S},pc_j,p,\chi_j,\xi_j,\phi,\Omega_{1:S}]$
+
+
+
+1. $y$ depends on $pc_j$,$p$, and $z_{1:S}$.
+2. $z$ depends on $\phi$ and $\Omega$. 
+3. $pc_j$ don't depend on any other parameters for the purpose of the model but in reality $pc_j$ depends on the terrain and cloud cover at location.
+
+
+
+
+The data consist of the counts $y_{w_{1:D}}$ and $y_{m_{1:D}}$. Below is the joint distribution written out with only $y_{w_{1:D}}$:
+
+$[y_{w_{1:D}}, z_{1:S}, p, \phi,\Omega_{1:S}] = [y_{w_{1:D}} \mid p,pc_j, z_{1:S}] \times [z_{1:S} \mid \phi,\Omega_{1:S}] \times [p,pc_j]$
+
+Following from the definition of independent random variables. If A
+ and B are independent, [A,B]=[A]×[B]. Since these probabilities have independent priors, we can rewrite the statement as follows:
+$[y_{w_{1:D}}, z_{1:S}, p, \psi] = \prod\limits_{i=1}^{D} [y_i \mid p,pc_j, z_i] [z_i \mid \phi, \Omega_j] \times [p][ pc_j]$
+
+## Marginalizing over discrete parameters for use in STAN
+
+To get rid of discrete latent parameter $z_{1:S}, we need to marginalize it out. STAN takes continuous parameters. Data may be discrete, but unknowns (including missing data) cannot be. 
+
+
+
+Given a joint distribution for y and z that depends on θ, we obtain the marginal distribution of y by summing the joint distribution over all possible values of z: 
+
+$[y \mid \theta] = \sum\limits_{z}[y,z \mid \theta]$
+
+For the $i^{th}$ location, we need to marginalize over $z_i$:
+
+$[y_i | p,pc_j,\phi,\Omega_j] = \sum\limits_{z_i = 0}^{1} [y_i, z_i | p, pc_j,\phi,\Omega_j]$
+
+We are summing over all possible values of $z_i$. In this case there are 4 ($z_i$
+can be 1,4,5,L).
+
+We can factor the joint distribution:
+
+$[y_i | p,pc_j,\phi,\Omega_j] = \sum\limits_{z_i = 0}^{1} [y_i|z_i, p, pc_j,\phi,\Omega_j][z_i|\phi,\Omega_j]$
+
+################################################
+We that assume J locations are each surveyed K times, in a time interval during which the number of individuals is not constant within locations j=1,....J i.e. there is an open population. 
+
+### Observation process model 
+
+Observations of individuals at site j in survey k provide counts of individuals detected ($y_{jk}$) for all $j$ and all $k$. Classification of individuals is conditionally independent, such that each individual is detected with site specific classification error $PC_{j}$, the observations can be modelled with a Binomial distribution where the number of trials is the true unknown count of individuals at that location $n_{j}$:
+
+$y_{jk} \sim \text{Binomial}(PC_{j},n_{j})$. 
+
+
+
+### Biological process model
+
+
+$n_{j} \sim \text{Poisson}(\lambda_{j})$
+
+
+
+

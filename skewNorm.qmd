@@ -1,0 +1,283 @@
+---
+title: "Skew normal"
+format: html
+editor: visual
+---
+
+Set parameters and plot skew normal for calculating the probability of birth across the season:
+
+1.  Calculate the PDF ($\phi$) and CDF ($\Phi$) of the skew-normal distribution for each day `x`
+
+-   **Parameter conversion for skew-normal distribution where** $\mu$=45, $\sigma$=10, and $\alpha$ =5 **:**
+
+$$
+\begin{align*}\delta &= \frac{\alpha}{\sqrt{1 + \alpha^2}} \\\omega &= \sqrt{\frac{\sigma^2}{1 - \frac{2 \delta^2}{\pi}}} \\\xi &= \mu - \omega \delta \sqrt{\frac{2}{\pi}}\end{align*}
+$$
+
+2.  Multiply the PDF and CDF to obtain the joint probability of a birth happening at that specific day `x`.
+
+$$
+Pb=\frac{2}{\omega} \phi\left( \frac{x - \xi}{\omega} \right) \cdot \Phi\left( \alpha \cdot \frac{x - \xi}{\omega} \right)$$
+
+-   **Probability density function:**
+    -   $\phi( \frac{x - \xi}{\omega} )$ represents the PDF of the normal distribution at point `x` scaled by the omega parameter.
+-   **Cumulative distribution function:**
+    -   $\Phi\left( \alpha \cdot \frac{x - \xi}{\omega} \right)$ represents the CDF of the normal distribution up to a point shifted by $\alpha\cdot\frac{x - \xi}{\omega}$
+-   **Scaling factor:**
+    -   $\frac{2}{\omega}$ scales the overall probability based on the omega parameter.
+
+```{r setup, include=TRUE}
+knitr::opts_chunk$set(warning = FALSE, message = FALSE)
+
+mu.bday=45
+sd.bday=10
+skew.bday=5
+ndays=123
+  # convert paramaters for skew normal
+dskewnorm <- function(x,skew.bday,mu.bday,sd.bday) {
+  
+  delta <- skew.bday/sqrt(1+(skew.bday^2))
+  
+  omega <- sqrt(sd.bday^2/(1-(2*delta^2)/pi))
+  
+  xi <- mu.bday - omega*delta*sqrt(2/pi)
+  (2/omega)*dnorm((x-xi)/omega) * pnorm(skew.bday*((x-xi)/omega))
+}
+
+integratePb <-  function(ndays,skew.bday,mu.bday,sd.bday) {
+  # Initialize Pb as a parameter of the same length as ndays
+  Pb <- rep(0, ndays)
+  
+  for (t in 2:ndays) {
+    
+    # Define the start and end of the interval
+    start <- t-1   
+    end <-  t
+    
+    # Integrate over the interval and add to the probability for this day
+    Pb[t] <- Pb[t] + integrate(dskewnorm,skew.bday=skew.bday,mu.bday=mu.bday,
+                               sd.bday=sd.bday, start, end)$value
+    
+  }
+  
+  # Return the probability vector
+  return(Pb)
+}
+
+Pb.skewn <- integratePb(ndays,skew.bday,mu.bday,sd.bday)
+sum(Pb.skewn)
+plot(Pb.skewn,col="red")
+```
+
+## Visualize skew normal vs log normal
+```{r,echo=FALSE}
+start=32
+ lCV <- sd.bday/(mu.bday-start)
+ lsd <- sqrt(log(lCV^2+1))
+ lmu <- log(mu.bday-start)-(0.5*(lsd^2))
+
+ Pb.logn<-rep(0,ndays)
+ # Calculate probability of being born on any given day
+ for(t in 2:ndays){
+   Pb.logn[t] <- plnorm((t-start+1), lmu, lsd) - plnorm((t-start), lmu, lsd)
+
+ }
+
+ 
+#Compare Pb lognorm vs skew norm
+plot(Pb.logn,type="l",col="blue",xlab="Days of season",ylab="Pb.logn vs Pb.skewn")
+lines(Pb.skewn,col="red")
+# Legend elements
+legend_labels <- c("Lognormal Pb", "Skewnormal Pb")
+legend_colors <- c("blue", "red")
+# Add legend at top left
+legend("topright", legend_labels, fill = legend_colors, cex = 0.8)
+
+#Compare cumulative densities
+plot(cumsum(Pb.logn),type="l",col="blue",xlab="Days of season",ylab="Cumulative Density Pb.logn vs Pb.skewn")
+lines(cumsum(Pb.skewn),col='red')
+# Legend elements
+legend_labels <- c("Lognormal Pb", "Skewnormal Pb")
+legend_colors <- c("blue", "red")
+# Add legend at top left
+legend("topleft", legend_labels, fill = legend_colors, cex = 0.8)
+
+```
+
+------------------------------------------------------------------------
+
+# MODEL
+
+Visualize gamma prior for Nborn and shifted beta priors for sd.bday, mu.bday and skew.bday:
+
+```{r,echo=FALSE}
+
+### shifted beta priors 
+# Set parameter values
+
+alpha.sd <- 5
+beta.sd <- 5
+shift.sd <- 5
+scale.sd <- 7
+
+alpha.m <- 5
+beta.m <- 5
+shift.m <- 10
+scale.m <- 45
+
+alpha.s <- 5
+beta.s <- 5
+shift.s <- 1
+scale.s <- 6
+
+# Set parameter values for the Poisson prior
+lambda <- 500
+# set values for Gamma prior
+shape=185
+scale=1
+
+# Number of samples
+n_samples <- 1000
+
+
+# Generate random samples from the Gamma distribution for the Nborn prior
+Nborn_prior <- rgamma(n_samples, shape,scale)
+
+# Generate random samples from the Poisson distribution for the Nborn prior
+#Nborn_prior <- rpois(n_samples, lambda)
+# Generate random samples from the shifted scale beta distribution for sd.bday
+sdbday.prior <- rbeta(n_samples, alpha.sd, beta.sd) * scale.sd + shift.sd
+
+# Generate random samples for mu.bday and skew.bday
+mubday.prior <- rbeta(n_samples, alpha.m, beta.m) * scale.m + shift.m
+
+
+skew.prior <- rbeta(n_samples, alpha.s, beta.s) * scale.s + shift.s
+
+# Plot 
+par(mfrow=c(2,2))
+par(oma=c(0,0,2,0))
+# Plot density
+plot(density(Nborn_prior), main = paste("Nborn prior (shape =", shape, ", scale =", scale,")", sep = ""),cex.main=0.9)
+plot(density(sdbday.prior), main = paste("sd.bday (shift =", shift.sd, ", scale =", scale.sd, ", alpha =", alpha.sd, ", beta =", beta.sd, ")", sep = ""),cex.main=0.9)
+plot(density(mubday.prior), main = paste("mu.bday (shift =", shift.m, ", scale =", scale.m, ", alpha =", alpha.m, ", beta =", beta.m, ")", sep = ""),cex.main=0.9)
+plot(density(skew.prior), main = paste("skew.bday (shift =", shift.s, ", scale =", scale.s, ", alpha =", alpha.s, ", beta =", beta.s, ")", sep = ""),cex.main=0.9)
+
+# quantile(Nborn_prior)
+# quantile(sdbday.prior)
+# quantile(mubday.prior)
+# quantile(skew.prior)
+```
+
+------------------------------------------------------------------------
+
+## Results
+
+### S3 Deterministic :
+
+### Simulation: normal approximation using binomial variance
+
+### Model: same as simulation
+
+Obsdays=1:123, Nborn=500, sd.bday=10, mu.bday=45, and skew.bday=5 in simulation. Gamma prior used for Nborn, shifted beta for sd.bday, and uniform for mu.bday and skew.bday.
+
+NOTE: this requires results from HgNimble_Model_S3.R which can be found in: S3mcmcoutput.rds
+
+```{r,echo=FALSE}
+library(bayesplot)
+library(MCMCvis)
+
+mcmcS3 <- readRDS("C:/Users/mg349/OneDrive - University of St Andrews/01 - Grey Seal Project/07 - GitHub Repositories/Hg_pup_model/S3mcmcoutput.rds")
+# library(bayesplot)
+# library(MCMCvis)
+ MCMCsummary(mcmcS3,params="all")
+# MCMCtrace(object = S3mcmcoutput,
+#           pdf = FALSE,
+#           ind = TRUE,
+#           Rhat=F,
+#           n.eff=F,
+#           params = "all")
+#MCMCplot(mcmcS4, params = 'Nborn', HPD = TRUE)
+mcmc_areas(
+  mcmcS3, 
+  pars = "Nborn",
+  prob = 0.95, # % intervals
+  prob_outer = 0.99, # 99%
+  point_est = "mean"
+)
+
+```
+
+## S4 Deterministic :
+
+### Simulation: exact observation process
+
+### Model: small variance
+
+Obsdays=1:123, Nborn=500, sd.bday=10, mu.bday=45, and skew.bday=5 in simulation. Gamma prior used for Nborn, shifted beta for sd.bday, and uniform for mu.bday and skew.bday
+
+NOTE: this requires results from HgNimble_Model_S4.R, mcmcS4_ex.rds
+
+```{r,echo=FALSE}
+
+mcmcS4_ex <- readRDS("C:/Users/mg349/OneDrive - University of St Andrews/01 - Grey Seal Project/07 - GitHub Repositories/Hg_pup_model/mcmcS4_ex.rds")
+#load("mcmcS4_ex.rds")
+#summarize model outputs
+MCMCsummary(mcmcS4_ex,params="all")
+
+# MCMCtrace(object = mcmcS4,
+#           pdf = FALSE,
+#           ind = TRUE,
+#           Rhat=F,
+#           n.eff=F,
+#           params = "all")
+
+
+
+mcmc_areas(
+  mcmcS4_ex,
+  pars = "Nborn",
+  prob = 0.95, # % intervals
+  prob_outer = 0.99, # 99%
+  point_est = "mean"
+)
+
+```
+
+------------------------------------------------------------------------
+
+### S4 Deterministic :
+
+#### Simulation: normal approximation using binomial variance
+
+#### Model: same as simulation
+
+Obsdays=1:123, Nborn=500, sd.bday=10, mu.bday=45, and skew.bday=5 in simulation. Gamma prior used for Nborn, shifted beta for sd.bday, and uniform for mu.bday and skew.bday.
+
+NOTE: this requires results from HgNimble_Model_S4.R which can be found in: skewS4_results.RData
+
+```{r,echo=FALSE}
+library(bayesplot)
+library(MCMCvis)
+
+mcmcS4 <- readRDS("C:/Users/mg349/OneDrive - University of St Andrews/01 - Grey Seal Project/07 - GitHub Repositories/Hg_pup_model/mcmcS4.rds")
+#load("skewS4_results.RData")
+#summarize model outputs
+MCMCsummary(mcmcS4,params="all")
+
+# MCMCtrace(object = mcmcS4,
+#           pdf = FALSE,
+#           ind = TRUE, 
+#           Rhat=F,
+#           n.eff=F,
+#           params = "all")
+
+mcmc_areas(
+  mcmcS4, 
+  pars = "Nborn",
+  prob = 0.95, # % intervals
+  prob_outer = 0.99, # 99%
+  point_est = "mean"
+)
+
+```

@@ -16,7 +16,7 @@ input_list = list(ndays = 123, amax=123,N=500,
                   POMoult = 0.94, POMoultSD = 0.03,
                   PCWhite = 1,PCWhiteS4 = 0.75, PCWhiteS4SD = 0.01,
                   PCMoult = 0.82, PCMoultSD = 0.09,
-                  obsdays = 33:123)#c(35,55, 60, 65, 70, 75, 80,85,90, 95,100,105,110)) #
+                  obsdays = c(40, 50, 60,70,80,90))#c(35,45,55,65,75,85,95,105,115))#c(35,55, 60, 65, 70, 75, 80,85,90, 95,100,105,110)) #c(35, 60, 75,90,100,110))#30:123)##
 thisenv <-environment()
 list2env(input_list, thisenv)
 
@@ -36,7 +36,7 @@ whiteSum <- nimbleFunction(
   run = function(born=double(1),PS4_sum=double(1),Pm_sum=double(1)){
     # whitePups <- numeric(value = 0, length = 123)
     ndays=length(born)
-    obsdays=33:123#c(35,55, 60, 65, 70, 75, 80,85,90, 95,100,105,110) # 
+    obsdays=  c(40, 50, 60,70,80,90)#c(35,45,55,65,75,85,95,105,115)#c(35,55, 60, 65, 70, 75, 80,85,90, 95,100,105,110) #c(35, 60, 75,90,100,110)#30:123
     whitePups <- rep(0,ndays)
     
     for (d in 2:(ndays)){
@@ -59,7 +59,7 @@ whiteSum <- nimbleFunction(
 S4Sum <- nimbleFunction(
   run = function(born=double(1),PS4_sum=double(1),Pm_sum=double(1)){
     ndays=length(born)
-    obsdays=33:123# c(35,55, 60, 65, 70, 75, 80,85,90, 95,100,105,110) #
+    obsdays=   c(40, 50, 60,70,80,90)#c(35,45,55,65,75,85,95,105,115)#c(35,55, 60, 65, 70, 75, 80,85,90, 95,100,105,110)#c(35, 60, 75,90,100,110)#30:123
     S4Pups <- rep(0,ndays)
     for (d in 2:(ndays)){
       for (i in 1:d){
@@ -79,7 +79,7 @@ S4Sum <- nimbleFunction(
 moultSum <- nimbleFunction(
   run = function(born=double(1),Pm_sum=double(1),Pl_sum=double(1)){ #,moultObs=double(1)
     ndays=length(born)
-    obsdays= 33:123#c(35,55, 60, 65, 70, 75, 80,85,90, 95,100,105,110) #
+    obsdays=  c(40, 50, 60,70,80,90)#c(35,45,55,65,75,85,95,105,115)#c(35,55, 60, 65, 70, 75, 80,85,90, 95,100,105,110)#c(35,75,90,110)#c(35, 60, 75,90,100,110)#30:123
     moultPups <- rep(0,ndays)
     for (d in 2:(ndays)){
       for (i in 1:d){
@@ -120,104 +120,74 @@ moultSum <- nimbleFunction(
 #   }
 # )
 
-dskewnorm <- function(x,skew.bday,mu.bday,sd.bday) {
-    delta <- skew.bday/sqrt(1+(skew.bday^2))
-    
-    omega <- sqrt(sd.bday^2/(1-(2*delta^2)/pi))
-    
-    xi <- mu.bday - omega*delta*sqrt(2/pi)
-    (2/omega)*dnorm((x-xi)/omega) * pnorm(skew.bday*((x-xi)/omega))
-  }
-
-
-###
-### integrate over intervals for Pb on a given day 
-###
-
-### 1) MG
-integratePb <-  function(ndays,int,skew.bday,mu.bday,sd.bday) {
-    # Initialize Pb as a parameter of the same length as ndays
-    Pb <- numeric(ndays)
-    
-    for (day in 1:ndays) {
-      # Initialize the probability for this day
-      Pb_day <- 0
-      
-      for (i in 1:int) {
-        # Define the start and end of the interval
-        start <- (day - 1) + (i - 1) / int
-        end <- start + 1 / int
-        
-        # Integrate over the interval and add to the probability for this day
-        Pb_day <- Pb_day + integrate(dskewnorm,skew.bday=skew.bday,mu.bday=mu.bday,sd.bday=sd.bday, start, end)$value
-      }
-      
-      # Store the probability for this day
-      Pb[day] <- Pb_day
-    }
-    
-    # Return the probability vector
-    return(Pb)
-}
-
-#ndays <- 123
-#int <- 100
-#result <- integratePb(ndays,int,skew.bday,mu.bday,sd.bday)
-#plot(result)
-intPb<-nimbleRcall(function(ndays=double(0),int=double(0),skew.bday=integer(),mu.bday=integer(),sd.bday=integer()){},Rfun ="integratePb",
-                   returnType=double(1))
-#compileNimble(intPb)
+# dskewnorm <- function(x,skew.bday,mu.bday,sd.bday) {
+#   Pb <- rep(0,ndays)  
+#   #x=1:123
+#   delta <- skew.bday/sqrt(1+(skew.bday^2))
+#     
+#     omega <- sqrt(sd.bday^2/(1-(2*delta^2)/pi))
+#     
+#     xi <- mu.bday - omega*delta*sqrt(2/pi)
+#     Pb <- (2/omega)*dnorm((x-xi)/omega) * pnorm(skew.bday*((x-xi)/omega))
+#     
+#     # Return the probability vector
+#     return(Pb)
+#   }
+# 
+# 
+# dskew<-nimbleRcall(function(x=double(0),skew.bday=integer(),mu.bday=integer(),sd.bday=integer()){},Rfun ="dskewnorm",
+#                    returnType=double(1))
+# 
+# test<-dskew(x,skew.bday,mu.bday,sd.bday)
+# 
+# ### 1) integrate over days of season for prob of being born on each day
+# integratePb <-  function(ndays,skew.bday,mu.bday,sd.bday) {
+#     # Initialize Pb as a parameter of the same length as ndays
+#     Pb <- rep(0, ndays)
+#     
+#     for (t in 2:ndays) {
+#       #for (i in 1:int) {
+#         # Define the start and end of the interval
+#         start <- t-1   
+#         end <-  t
+#         
+#         # Integrate over the interval and add to the probability for this day
+#         Pb[t] <- Pb[t] + integrate(dskew,skew.bday=skew.bday,mu.bday=mu.bday,sd.bday=sd.bday, start, end)$value
+#     }
+#     
+#     # Return the probability vector
+#     return(Pb)
+# }
+# 
+#  # ndays <- 123
+#  #result <- integratePb(ndays,skew.bday,mu.bday,sd.bday)
+# #plot(result)
+# intPb<-nimbleRcall(function(ndays=double(0),skew.bday=integer(),mu.bday=integer(),sd.bday=integer()){},Rfun ="integratePb",
+#                    returnType=double(1))
+# ##compileNimble(intPb)
 
 
 
 
 ### 2) (EJ METHOD)
-# now need to make this a cdf and make sure it matches
-slice <-  function(ndays,nslice,skew.bday,mu.bday,sd.bday) {
-  ndays <- 123
-  nslice <- 1000
-  Pb <- rep(0, ndays)
-  for (i in 1:ndays){
-    for (j in 1:nslice){
-      dayslice <- i + (j/nslice)
-      Pb[i] <- Pb[i] + dskewnorm(dayslice, skew.bday, mu.bday, sd.bday)
-    }
-  }
-  return(Pb)
-}
-
-
-#Pb<-pborn/sum(pborn)
-slicePb<-nimbleRcall(function(ndays=double(0),nslice=double(0),skew.bday=integer(),mu.bday=integer(),sd.bday=integer()){},Rfun ="slice",
-                     returnType=double(1))
-#compileNimble(slicePb)
-
-
-
-###  CDF for prob of being born on a given day using Reimann sums
-# CdfSkewNorm <- nimbleFunction(
-#   run = function(skew.bday=double(1), mu.bday=double(1), sd.bday=double(1)){
-#     ndays <- 123
-#     Pb <- rep(0, ndays)
-#     nslice <- 100
-#     dayslice<-rep(0,ndays+1)
-#     delta <- skew.bday / sqrt(1 + (skew.bday^2))
-#     omega <- sqrt(sd.bday^2 / (1 - (2 * delta^2) / pi))
-#     xi <- mu.bday - omega * delta * sqrt(2/pi)
-#     
-#     for (i in 1:ndays){
-#       for (j in 1:nslice){
-#         dayslice<- i + (j / nslice)
-#         Pb[i] <- (2 / omega) * dnorm((dayslice- xi) / omega) * pnorm(skew.bday * ((dayslice - xi) / omega))
-#       }
+# # now need to make this a cdf and make sure it matches
+# slice <-  function(ndays,nslice,skew.bday,mu.bday,sd.bday) {
+#   ndays <- 123
+#   nslice <- 1000
+#   Pb <- rep(0, ndays)
+#   for (i in 1:ndays){
+#     for (j in 1:nslice){
+#       dayslice <- i + (j/nslice)
+#       Pb[i] <- Pb[i] + dskewnorm(dayslice, skew.bday, mu.bday, sd.bday)
 #     }
-#     
-#     
-#     returnType(double(1))
-#     return(Pb)
 #   }
-# )
+#   return(Pb)
+# }
+# 
+# 
+# #Pb<-pborn/sum(pborn)
+# slicePb<-nimbleRcall(function(ndays=double(0),nslice=double(0),skew.bday=integer(),mu.bday=integer(),sd.bday=integer()){},Rfun ="slice",
+#                      returnType=double(1))
+# #compileNimble(slicePb)
 
-#######################
-###
 

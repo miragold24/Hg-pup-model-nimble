@@ -212,33 +212,22 @@ if(useData == 1) {
 ## option 2
 ## your simulated data:
 if(useData == 2) {
-   # sim_S4 <- simSealsS4()
-    wObs <- round(sim_S4$wObs)
-    mObs <- round(sim_S4$mObs)
+    sim_S4 <- simSealsS4()
+    wObs <- sim_S4$wObs
+    mObs <- sim_S4$mObs
     ndays <- length(wObs)
-    obsdays <- 1:length(wObs)
+    obsdays <- c(65, 70, 75, 80,85,90)#1:length(wObs)
 }
-
+wObs
+mObs
 ########################################################################
 ########################################################################
 
 code <- nimbleCode({
+    # mu.bday ~ dunif(20, 60)
+    # skew.bday ~ dunif(5, 8)
+    # sd.bday ~ dunif(10, 12)
   
-  ###
-  ### Priors 
-  ###
-  
-  #shifted beta priors
-  # standard_beta.m ~ dbeta(alpha.m, beta.m)
-  # standard_beta.sd ~ dbeta(alpha.sd, beta.sd)
-  # standard_beta.s ~ dbeta(alpha.s, beta.s)
-  # # Shifting and scaling the distribution
-  # mu.bday <- shift.m + (scale.m * standard_beta.m)
-  # sd.bday <- shift.sd + (scale.sd * standard_beta.sd)
-  # skew.bday <- shift.s + (scale.s * standard_beta.s)
-
-    
-    #uninformative priors 
     mu.bday ~ dunif(0, ndays)
     skew.bday ~ dunif(0, ndays)
     sd.bday ~ dunif(0, ndays)
@@ -248,29 +237,26 @@ code <- nimbleCode({
     sd.mday ~ dunif(0, ndays)
     mu.lday ~ dunif(0, ndays)
     sd.lday ~ dunif(0, ndays)
-    # # 
-    cons[1] ~ dconstraint(mu.sday < mu.mday)
-    cons[2] ~ dconstraint(mu.mday < mu.lday)
-    #observation priors 
-    # POWhite ~ dunif(.5, 1)
-    # POMoult ~ dunif(.5, 1)
-    # PCMoult ~ dunif(.5, 1)
-    # PCStge4 ~ dunif(.5, 1)
-    
-    #calculate birth and transition probabilities 
-    pb[1:ndays] <- int_pb(ndays, skew.bday, mu.bday, sd.bday)
 
+    pb[1:ndays] <- int_pb(ndays, skew.bday, mu.bday, sd.bday)
+    
     ps1[1:ndays] <- pnorm(1:ndays, mu.sday, sd.sday) - pnorm(0:(ndays-1), mu.sday, sd.sday)
     ps[1:ndays] <- ps1[1:ndays]/sum(ps1[1:ndays])
-  
+    
     pm1[1:ndays] <- pnorm(1:ndays, mu.mday, sd.mday) - pnorm(0:(ndays-1), mu.mday, sd.mday)
     pm[1:ndays] <- pm1[1:ndays]/sum(pm1[1:ndays])
-
-   
+    
+    
     pl1[1:ndays] <- pnorm(1:ndays, mu.lday, sd.lday) - pnorm(0:(ndays-1), mu.lday, sd.lday)
     pl[1:ndays] <- pl1[1:ndays]/sum(pl1[1:ndays])
-   
-
+    
+    POWhite ~ dunif(.5, 1)
+    POMoult ~ dunif(.5, 1)
+    # PCMoult ~ dunif(.5, 1)
+    # PCStge4 ~ dunif(.5, 1)
+    ##
+    cons[1] ~ dconstraint(mu.sday < mu.mday)
+    cons[2] ~ dconstraint(mu.mday < mu.lday)
     ##
     for(i in 1:M)   z[i, 1:4] ~ dIndividual(pb[1:ndays], ps[1:ndays], pm[1:ndays], pl[1:ndays])
     ##
@@ -280,121 +266,75 @@ code <- nimbleCode({
     moultDaily[1:ndays] <- calcDaily_intermediate(ndays, z[1:M,3:4])
     leaveDaily[1:ndays] <- calcDaily_boundary    (ndays, z[1:M,  4])
     nInd <- sum(bornDaily[1:ndays])
-    #whiteDaily1_4[1:ndays]<-whiteDaily[1:ndays]+stge4Daily[1:ndays]
+    ##
+    
+    #Binomial obs only
+    white1_4[1:ndays] <- whiteDaily[1:ndays] + stge4Daily[1:ndays]
+    for(i in 1:length(obsdays)) {
+      # no classification
+      wObs[i] ~ dbinom(POWhite,white1_4[i])
+      mObs[i] ~ dbinom(POMoult,moultDaily[i])
+      
+      # #   # add misclassification
+      #   # whiteM[i] <- whiteDaily[obsdays[i]]+ stge4Daily[obsdays[i]] * PCStge4                       + moultDaily[obsdays[i]] * (1-PCMoult)
+      #   # moultM[i] <- stge4Daily[obsdays[i]] * (1-PCStge4)                         + moultDaily[obsdays[i]] * PCMoult
+      #   # wObs[i] ~ dbinom(POWhite,round(whiteM[i]))
+      #   # mObs[i] ~ dbinom(POMoult,round(moultM[i]))
+      # 
+    }
+    
+    # for(i in 1:length(obsdays)) {
+    #     whiteM[i] <- whiteDaily[obsdays[i]] * POWhite               + stge4Daily[obsdays[i]] * POWhite*PCStge4                       + moultDaily[obsdays[i]] * POMoult*(1-PCMoult)
+    #     whiteV[i] <- whiteDaily[obsdays[i]] * POWhite * (1-POWhite) + stge4Daily[obsdays[i]] * POWhite*PCStge4 * (1-POWhite*PCStge4) + moultDaily[obsdays[i]] * POMoult*(1-PCMoult) * (1-POMoult*(1-PCMoult))
+    #     whiteS[i] <- max(sqrt(whiteV[i]), 0.00000001)
+    #     moultM[i] <- stge4Daily[obsdays[i]] * POWhite*(1-PCStge4)                         + moultDaily[obsdays[i]] * POMoult*PCMoult
+    #     moultV[i] <- stge4Daily[obsdays[i]] * POWhite*(1-PCStge4)*(1-POWhite*(1-PCStge4)) + moultDaily[obsdays[i]] * POMoult*PCMoult * (1-POMoult*PCMoult)
+    #     moultS[i] <- max(sqrt(moultV[i]), 0.00000001)
+    #     wObs[i] ~ dnorm(whiteM[i], sd = whiteS[i])
+    #     mObs[i] ~ dnorm(moultM[i], sd = moultS[i])
+    # }
 
-    ###
-    ### OBSERVATION MODEL
-    ### 
-          
-          # summing binomials (?):
-          # for (i in 1:length(obsdays)){
-       
-          #   wObs[i] ~ dbinom(POWhite, whiteDaily[i])+ dbinom(PCStge4*POWhite, stge4Daily[i]) + dbinom((1-PCMoult)*POMoult,moultDaily[i]) 
-          #   mObs[i] ~ dbinom(POMoult*PCMoult, moultDaily[i]) +dbinom((1-PCStge4)*POWhite,whiteDaily[i])
-          # 
-          # }
-    
-    
-        # Poisson
-         for (i in 1:length(obsdays)){
-              whiteM[i] <-  whiteDaily[obsdays[i]] * POWhite               + stge4Daily[obsdays[i]] * POWhite*PCStge4                       + moultDaily[obsdays[i]] * POMoult*(1-PCMoult)
-              moultM[i] <- stge4Daily[obsdays[i]] * POWhite*(1-PCStge4)                         + moultDaily[obsdays[i]] * POMoult*PCMoult
-              wObs[i] ~ dpois(whiteM[i])
-              mObs[i] ~ dpois(moultM[i])
-         }
-
-
-    ## norm apprx
-        # for(i in 1:length(obsdays)) {
-        #     whiteM[i] <- whiteDaily[obsdays[i]] * POWhite               + stge4Daily[obsdays[i]] * POWhite*PCStge4                       + moultDaily[obsdays[i]] * POMoult*(1-PCMoult)
-        #     whiteV[i] <- whiteDaily[obsdays[i]] * POWhite * (1-POWhite) + stge4Daily[obsdays[i]] * POWhite*PCStge4 * (1-POWhite*PCStge4) + moultDaily[obsdays[i]] * POMoult*(1-PCMoult) * (1-POMoult*(1-PCMoult))
-        #     whiteS[i] <- max(sqrt(whiteV[i]), 0.00000001)
-        #     moultM[i] <- stge4Daily[obsdays[i]] * POWhite*(1-PCStge4)                         + moultDaily[obsdays[i]] * POMoult*PCMoult
-        #     moultV[i] <- stge4Daily[obsdays[i]] * POWhite*(1-PCStge4)*(1-POWhite*(1-PCStge4)) + moultDaily[obsdays[i]] * POMoult*PCMoult * (1-POMoult*PCMoult)
-        #     moultS[i] <- max(sqrt(moultV[i]), 0.00000001)
-        # 
-        #   # With small variance  model expects the observations to be very close to the means whiteM[i] and moultM[i].
-        #   # If the observations are not close to the means, the log prob will be a large negative number
-        #     wObs[i] ~ dnorm(whiteM[i], sd = 0.001)
-        #     mObs[i] ~ dnorm(moultM[i], sd = 0.001)
-        #     # wObs[i] ~ dnorm(whiteM[i], sd = whiteS[i])
-        #     # mObs[i] ~ dnorm(moultM[i], sd = moultS[i])
-        # }
-
-    
-    
-    ## BINOMIAL WITH CLASSIFICATION FIRST -> POBS IN BINOMIAL
-
-            # for(i in 1:length(obsdays)) {
-            #   whiteM[i] <- whiteDaily[obsdays[i]]+ stge4Daily[obsdays[i]] * PCStge4                       + moultDaily[obsdays[i]] * (1-PCMoult)
-            #   # whiteV[i] <- whiteDaily[obsdays[i]] + stge4Daily[obsdays[i]] * POWhite*PCStge4 * (1-PCStge4) + moultDaily[obsdays[i]] *(1-PCMoult) * (1-(1-PCMoult))
-            #   # whiteS[i] <- max(sqrt(whiteV[i]), 0.00000001)
-            #   moultM[i] <- stge4Daily[obsdays[i]] * (1-PCStge4)                         + moultDaily[obsdays[i]] * PCMoult
-            #   # moultV[i] <- stge4Daily[obsdays[i]] * (1-PCStge4)*(1-(1-PCStge4)) + moultDaily[obsdays[i]] * PCMoult * (1-PCMoult)
-            #   # moultS[i] <- max(sqrt(moultV[i]), 0.00000001)
-            # 
-            #   wObs[i] ~ dbinom(POWhite,whiteM[i])
-            #   mObs[i] ~ dbinom(POMoult,moultM[i])
-            # 
-            # }
-         
-    
-    
-    
- })
+})
 
 M <- max(ceiling(max(wObs+mObs) * 1.2), 20)       ## maximum possible number of individuals this model will allow
-constants <- list(ndays = ndays, M = M, obsdays = obsdays,
-                   # ,sd.sday=5,sd.mday=5,sd.lday = 7,mu.sday=17,mu.mday=23,mu.lday = 31.5,
-                  POWhite=0.98,POMoult=0.94,PCMoult=0.82,PCStge4=0.75)
-
+constants <- list(ndays = ndays, M = M, obsdays = obsdays)#,POWhite=POWhite,POMoult=POMoult,PCStge4=0.75,PCMoult=PCMoult)
 data <- list(wObs = wObs, mObs = mObs, cons = c(1,1))
 z_init <- array(0, c(M,4))
 
-#for (1 in 1:x) x must be less than the total generated nInd
 if(useData == 1) {    for(i in 1:15 )   z_init[i,1:4] <- c( 5, 10, 13,  22)    }
-if(useData == 2) {    for(i in 1:400)   z_init[i,1:4] <- c(25, 40, 55, 120)    }
+#if(useData == 2) {    for(i in 1:400)   z_init[i,1:4] <- c(25, 40, 55, 120)    }
+if(useData == 2) {    for(i in 1:400)   z_init[i,1:4] <- c(65, 70, 75, 80)    }
 #if(useData == 2) {    for(i in 1:400)   z_init[i,1:4] <- c(45, 62, 68, 76)    }
+#if(useData == 2) {    for(i in 1:400)   z_init[i,1:4] <- c(69, 70, 71, 72)    }
 
+# Dt inits for data 1 with uninformative priors
+inits=list(
+      mu.bday=45,
+      sd.bday=10,
+      skew.bday=5,
+      mu.sday = 17,
+      sd.sday = 10,
+      mu.mday = 23,
+      sd.mday = 5,
+      mu.lday =31.5,
+      sd.lday = 7,
+    # mu.bday = (1/5) * ndays,
+    # skew.bday = 2,
+    # sd.bday = 20,
+    # mu.sday = (2/5) * ndays,
+    # sd.sday = 20,
+    # mu.mday = (3/5) * ndays,
+    # sd.mday = 20,
+    # mu.lday = (4/5) * ndays,
+    # sd.lday = 20,
+    POWhite = 0.9,
+    POMoult = 0.9,
+    # PCMoult = 0.9,
+    # PCStge4 = 0.9,
+    z = z_init
+)
 
-inits <- list(
-  # shifted beta prior inits 
-   # standard_beta.m=rbeta(1,2,2),
-   # standard_beta.s=rbeta(1,2,2),
-   # standard_beta.sd=rbeta(1,2,2),
-   # alpha.m=2,
-   # beta.m=2,
-   # shift.m=10,
-   # scale.m=40,
-   # # sd.bday
-   # alpha.sd=2,
-   # beta.sd=2,
-   # shift.sd=6,
-   # scale.sd=5,
-   # alpha.s = 2,
-   # beta.s = 2,
-   # shift.s = 1,
-   # scale.s = 5,
-  
-    
-    # Dt inits for data 1 with uninformative priors
-    # mu.bday =  45, #(1/5) * ndays,
-    # skew.bday = 5, #2,
-    # sd.bday = 10, #20,
-    mu.sday = 17,#(2/5) * ndays,
-    sd.sday = 10,#20,
-    mu.mday = 23,#(3/5) * ndays,
-    sd.mday = 7, #20,
-    mu.lday = 31.5,#(4/5) * ndays,
-    sd.lday = 10, #20,
-#     POWhite = 0.9,
-#     POMoult = 0.9,
-#     PCMoult = 0.9,
-#     PCStge4 = 0.9,
-     z = z_init
- )
-
-Rmodel <- nimbleModel(code, constants, data, inits,dimensions=list(whiteM=ndays,moultM=ndays))
+Rmodel <- nimbleModel(code, constants, data, inits)
 # calculate() provides the log likelihood of the model 
 # the closer to zero the log-likelihood, the better the model fits the data.
 Rmodel$calculate()   ## make sure this gives you a real number (not NaN or -Inf)
@@ -405,20 +345,14 @@ conf$addSampler('z', 'add_remove', tries = 10)
 conf$addSampler('z', 'modify',     tries = 10)
 
 Rmcmc <- buildMCMC(conf)
-runMCMC(Rmcmc,niter=1)
+#runMCMC(Rmcmc,niter=1)
 Cmodel <- compileNimble(Rmodel)
 Cmcmc <- compileNimble(Rmcmc, project = Rmodel)
 
 set.seed(0)
-samples1 <- runMCMC(Cmcmc, niter = 10000, nburnin = 5000, thin = 2)
+samples <- runMCMC(Cmcmc, niter = 10000, nburnin = 5000, thin = 10)
 
-#check initial values
 
-#samples <- runMCMC(Cmcmc, niter = 20000, nburnin = 5000, thin = 10, nchains = 2)
-# Run the code and capture time information
-#run_time <- system.time(samples <- runMCMC(Cmcmc, niter = 10000, nburnin = 5000, thin = 10, nchains = 2))
-# Access the elapsed time from the list
-#cat("Elapsed time for runMCMC:", run_time[["elapsed"]], "seconds\n")
 ############################################################################# 
 ####################### plots and diagnostics ############################### 
 ############################################################################# 
@@ -448,31 +382,17 @@ data.frame(
     leave = Cmodel$leaveDaily
 )
 
-library(coda)
-library(MCMCvis)
-#par(mfrow=c(2,4))
-# 
-# MCMCtrace(object = samples1,
-#                    pdf =F, 
-#                     type='density',
-#                    ind = TRUE, # separate density lines per chain
-#                    Rhat=F,
-#                    n.eff=F,
-#                     params = 'all') #c('nInd','mu.bday','sd.bday','skew.bday'))
-
-MCMCsummary(samples1)
 ## posterior statistics of parameters:
-# samplesSummary(samples)
-# 
-# ## traceplots of parameters
+samplesSummary(samples)
+
+## traceplots of parameters
 library(tidyverse)
-samples1 %>%
+samples %>%
     as.data.frame() %>%
-    mutate(iter = 1:nrow(samples1)) %>%
+    mutate(iter = 1:nrow(samples)) %>%
     pivot_longer(-iter, names_to = 'param', values_to = 'value') %>%
     ggplot(aes(x = iter, y = value)) +
     geom_line() +
     facet_wrap(~param, scales = 'free')
-
 
 
