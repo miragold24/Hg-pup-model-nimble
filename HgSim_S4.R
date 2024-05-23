@@ -1,7 +1,7 @@
 ### ===================
 ### HG pup simulation with 4 stages: whitecoat, moulting (S4) moulted, leave 
 ### ===================
-source("leaveFunction.R")
+#source("leaveFunction.R")
 input_list = list(ndays = 123, amax=123,N=500, mu.bday = 45, sd.bday = 10,
                   mu.s4day = 17, sd.s4day = 5,
                   mu.mlen = 6, sd.mlen = 2,mu.mday=23,sd.mday=5,
@@ -11,7 +11,7 @@ input_list = list(ndays = 123, amax=123,N=500, mu.bday = 45, sd.bday = 10,
                   POMoult = 0.94, POMoultSD = 0.03,
                   PCWhite = 1,PCWhiteS4 = 0.75, PCWhiteS4SD = 0.01,
                   PCMoult = 0.82, PCMoultSD = 0.09,
-                  obsdays = 1:123) #c(35,45,55,65,75,85,95,105,115))#c(50, 60,70,80,90))#c(35, 50, 75,90,105,120))#c(35,55, 60, 65, 70, 75, 80,85,90, 95,100,105,110)) #
+                  obsdays = c(35,45,55,65,75,85,95,105,115))#c(35,55, 60, 65, 70, 75, 80,85,90, 95,100,105,110))
 thisenv <-environment()
 list2env(input_list, thisenv)
 
@@ -29,7 +29,7 @@ simSealsS4 <- function(N = 500,
    PCWhite = 1, 
    PCMoult = 0.82, PCMoultSD = 0.09, 
    PCWhiteS4 = 0.75, PCWhiteS4SD = 0.01,
-   obsdays =  1:123, #c(35,45,55,65,75,85,95,105,115),#c(50, 60,70,80,90),#c(35, 50, 75,90,105,120),#30:123, ,#c(35,55, 60, 65, 70, 75, 80,85,90, 95,100,105,110),#
+   obsdays = c(35,45,55,65,75,85,95,105,115),#c(35,55, 60, 65, 70, 75, 80,85,90, 95,100,105,110),
    popproc = "stocdis", #detcont = deterministic and continuous, option for 
    # "stocdis" - stochastic and discrete
    obsproc = 'binom',seed=2024) {  
@@ -157,54 +157,54 @@ simSealsS4 <- function(N = 500,
     
     #The t function transposes this matrix, so each row of realBorn represents a draw.
     realBorn <- as.numeric(t(rmultinom(1, size = N, prob = Pb)))
-    realS4 <- matrix(rep(0, ndays * amax), nrow = ndays, ncol = amax)
-    for (i in 1:ndays){
-      
-      while(sum(realS4[i,]) != sum(realBorn[i])){
-        realS4[i,] <- rbinom(n = amax, size = realBorn[i], prob = PS4)
-      }
-      
-    }
-    
-    s4vec <- rep(0, ndays)
-    tmin <- min(which(realBorn!=0))
-    
-    #take upper triangular of realS4
-    for (i in tmin:ndays){
-      
-      
-      s4v <- 0
-      rowmax <- i - tmin + 1
-      
-      for (j in tmin:i){
-        for (k in 1:rowmax){
-          
-          s4v <- sum(s4v, realS4[j, k])
-          
-        } # end for k
-        
-        rowmax <- rowmax - 1
-      }
-      
-      s4vec[i] <- s4v
-    } # end for i
-    cumS4<-s4vec
+    # realS4 <- matrix(rep(0, ndays * amax), nrow = ndays, ncol = amax)
+    # for (i in 1:ndays){
+    #   
+    #   while(sum(realS4[i,]) != sum(realBorn[i])){
+    #     realS4[i,] <- rbinom(n = amax, size = realBorn[i], prob = PS4)
+    #   }
+    #   
+    # }
+    # 
+    # s4vec <- rep(0, ndays)
+    # tmin <- min(which(realBorn!=0))
+    # 
+    # #take upper triangular of realS4
+    # for (i in tmin:ndays){
+    #   
+    #   
+    #   s4v <- 0
+    #   rowmax <- i - tmin + 1
+    #   
+    #   for (j in tmin:i){
+    #     for (k in 1:rowmax){
+    #       
+    #       s4v <- sum(s4v, realS4[j, k])
+    #       
+    #     } # end for k
+    #     
+    #     rowmax <- rowmax - 1
+    #   }
+    #   
+    #   s4vec[i] <- s4v
+    # } # end for i
+    # cumS4<-s4vec
     
   # S4 pups generated as multinomial random variable and upper triangle, giving neg S4 pups
-    # realS4 <- matrix(rep(0, ndays * amax), nrow = ndays, ncol = amax)
-    # cumS4 <- numeric(ndays)# stores cumulative sum of moulted pups
-    # for (i in 2:ndays) {
-    #   for (j in 1:amax) {
-    #     realS4[i, ] <- as.numeric(t(rmultinom(1, size = realBorn[i], prob = PS4)))
-    # 
-    # 
-    #     # Extract moulting data for current and previous days
-    #     S4 <- realS4[1:i, 1:j]
-    #   }
-    #   # Flip the upper triangle to get daily and cumulative moulting
-    #   flip.S4 <- S4[i:1, ]
-    #   cumS4[i] <- sum(S4) - sum(flip.S4[upper.tri(flip.S4)]) #sum of fliped M is whitePups present each day
-    # }
+    realS4 <- matrix(rep(0, ndays * amax), nrow = ndays, ncol = amax)
+    cumS4 <- numeric(ndays)# stores cumulative sum of moulted pups
+    for (i in 2:ndays) {
+      for (j in 1:amax) {
+        realS4[i, ] <- as.numeric(t(rmultinom(1, size = realBorn[i], prob = PS4)))
+
+
+        # Extract moulting data for current and previous days
+        S4 <- realS4[1:i, 1:j]
+      }
+      # Flip the upper triangle to get daily and cumulative moulting
+      flip.S4 <- S4[i:1, ]
+      cumS4[i] <- abs(sum(S4) - sum(flip.S4[upper.tri(flip.S4)])) #sum of fliped M is whitePups present each day
+    }
     
       ###################
       realMoult = array(data = 0, dim = c(ndays,amax,amax))
