@@ -31,20 +31,18 @@ list2env(input_list, thisenv)
 ###
 ###===============================================================
 
-SkewNorm<- nimbleFunction(
-  run=function(Pb_sum=double(1)){
-    Pb <- rep(0, ndays)
-    
-    for(t in 2:ndays){
-      Pb[t] <- pskew_normal(q = t, mu = mu.bday, sigma = sd.bday, alpha = skew.bday) -
-        pskew_normal(q = t-1, mu = mu.bday, sigma = sd.bday, alpha = skew.bday)
-    }
-    
-    Pb_sum <- Pb/sum(Pb)
-    
-  }
-)
-
+# SkewNorm<- nimbleFunction(
+#   run=function(Pb_sum=double(1)){
+#     Pb <- rep(0, ndays)
+#     for(t in 2:ndays){
+#       Pb[t] <- pskew_normal(q = t, mu = mu.bday, sigma = sd.bday, alpha = skew.bday) -
+#         pskew_normal(q = t-1, mu = mu.bday, sigma = sd.bday, alpha = skew.bday)
+#     }
+#     
+#     Pb_sum <- Pb/sum(Pb)
+#     
+#   }
+# )
 
 
 
@@ -101,39 +99,42 @@ moultSum <- nimbleFunction(
  #moultSumc <-compileNimble(moultSum)
 
 dskewnorm <- function(x,skew.bday,mu.bday,sd.bday) {
-  delta <- skew.bday/sqrt(1+(skew.bday^2))
+
+   delta <- skew.bday/sqrt(1+(skew.bday^2))
   
   omega <- sqrt(sd.bday^2/(1-(2*delta^2)/pi))
   
   xi <- mu.bday - omega*delta*sqrt(2/pi)
   (2/omega)*dnorm((x-xi)/omega) * pnorm(skew.bday*((x-xi)/omega))
+  
+  # Return the probability vector
+  #return(Pb)
 }
 
 
-integratePb <-  function(ndays,int,skew.bday,mu.bday,sd.bday) {
+dskew<-nimbleRcall(function(x=double(0),skew.bday=integer(),mu.bday=integer(),sd.bday=integer()){},Rfun ="dskewnorm",
+                   returnType=double(1))
+
+#test2<-dskew(x=1:123,skew.bday,mu.bday,sd.bday)
+integratePb <-  function(ndays,skew.bday,mu.bday,sd.bday) {
   # Initialize Pb as a parameter of the same length as ndays
-  Pb <- numeric(ndays)
+  Pb <- rep(0, ndays)
   
-  for (day in 1:ndays) {
-    # Initialize the probability for this day
-    Pb_day <- 0
+  for (t in 2:ndays) {
     
-    for (i in 1:int) {
-      # Define the start and end of the interval
-      start <- (day - 1) + (i - 1) / int
-      end <- start + 1 / int
-      
-      # Integrate over the interval and add to the probability for this day
-      Pb_day <- Pb_day + integrate(dskewnorm,skew.bday=skew.bday,mu.bday=mu.bday,sd.bday=sd.bday, start, end)$value
-    }
+    # Define the start and end of the interval
+    start <- t-1   
+    end <-  t
     
-    # Store the probability for this day
-    Pb[day] <- Pb_day
+    # Integrate over the interval and add to the probability for this day
+    Pb[t] <- Pb[t] + integrate(dskew,skew.bday=skew.bday,mu.bday=mu.bday,sd.bday=sd.bday, start, end)$value
+  
   }
   
   # Return the probability vector
   return(Pb)
 }
+test2<- integratePb(ndays,skew.bday,mu.bday,sd.bday)
 
-intPb<-nimbleRcall(function(ndays=double(0),int=double(0),skew.bday=integer(),mu.bday=integer(),sd.bday=integer()){},Rfun ="integratePb",
+intPb<-nimbleRcall(function(ndays=double(0),skew.bday=integer(),mu.bday=integer(),sd.bday=integer()){},Rfun ="integratePb",
                    returnType=double(1))
