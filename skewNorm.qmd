@@ -1,5 +1,5 @@
 ---
-title: "Skew normal"
+title: "Skew normal visualization and application to deterministic Hg model (with simulated data)"
 format: html
 editor: visual
 ---
@@ -70,6 +70,7 @@ plot(Pb.skewn,col="red")
 ```
 
 ## Visualize skew normal vs log normal
+
 ```{r,echo=FALSE}
 start=32
  lCV <- sd.bday/(mu.bday-start)
@@ -187,7 +188,7 @@ NOTE: this requires results from HgNimble_Model_S3.R which can be found in: S3mc
 library(bayesplot)
 library(MCMCvis)
 
-mcmcS3 <- readRDS("C:/Users/mg349/OneDrive - University of St Andrews/01 - Grey Seal Project/07 - GitHub Repositories/Hg_pup_model/S3mcmcoutput.rds")
+mcmcS3 <- readRDS("C:/Users/mg349/OneDrive - University of St Andrews/01 - Grey Seal Project/07 - GitHub Repositories/archive/S3mcmcoutput.rds")
 # library(bayesplot)
 # library(MCMCvis)
  MCMCsummary(mcmcS3,params="all")
@@ -220,7 +221,7 @@ NOTE: this requires results from HgNimble_Model_S4.R, mcmcS4_ex.rds
 
 ```{r,echo=FALSE}
 
-mcmcS4_ex <- readRDS("C:/Users/mg349/OneDrive - University of St Andrews/01 - Grey Seal Project/07 - GitHub Repositories/Hg_pup_model/mcmcS4_ex.rds")
+mcmcS4_ex <- readRDS("C:/Users/mg349/OneDrive - University of St Andrews/01 - Grey Seal Project/07 - GitHub Repositories/archive/mcmcS4_ex.rds")
 #load("mcmcS4_ex.rds")
 #summarize model outputs
 MCMCsummary(mcmcS4_ex,params="all")
@@ -260,7 +261,7 @@ NOTE: this requires results from HgNimble_Model_S4.R which can be found in: skew
 library(bayesplot)
 library(MCMCvis)
 
-mcmcS4 <- readRDS("C:/Users/mg349/OneDrive - University of St Andrews/01 - Grey Seal Project/07 - GitHub Repositories/Hg_pup_model/mcmcS4.rds")
+mcmcS4 <- readRDS("C:/Users/mg349/OneDrive - University of St Andrews/01 - Grey Seal Project/07 - GitHub Repositories/archive/mcmcS4.rds")
 #load("skewS4_results.RData")
 #summarize model outputs
 MCMCsummary(mcmcS4,params="all")
