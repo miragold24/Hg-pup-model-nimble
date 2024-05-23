@@ -28,8 +28,7 @@ simSealsS3 <- function(N = 500,
    #          "normappx"= obs are normal approximated using binomial variance
    #          "binomial" = obs are binomially distributed 
    obsproc = "binom",seed=2024) {  
-
-
+  
   #============================================================================
   ### BIOLOGICAL PROCESS
   ### Simulate births over season and transition to moulted and leaving colony: 
