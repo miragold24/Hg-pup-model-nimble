@@ -1,0 +1,324 @@
+### Recode model in JAGS
+##      simplify to just time of birth, duration on colony, slope and int of pmoult
+   
+# getwd()
+#StA drive file path
+# work_dir<-("C:/Users/mg349/OneDrive - University of St Andrews/01 - Grey Seal Project/06 - Scripts")
+
+
+# setwd(work_dir)
+#library(tidyverse)
+library(jagsUI)
+library(coda)
+
+###########
+# Load data
+###########
+#source('HgSim_kts_wm.R')
+
+##############
+# JAGS code
+## =====================================================================
+## =====================================================================
+
+jagsfile <- "Hgpup_wm.txt" 
+
+cat("
+
+    
+    #TO:   continue changing names and descriptions. start with Nborn and cohort.size. 
+    
+model{
+
+# set prior on daily survival intercept and slope
+surv.int.real ~ dbeta(175,1)
+surv.int <-  4    # log(surv.int.real/(1-surv.int.real))       # logit scale
+surv.slope <- 0.1 # ~ dunif(0,.5)                               # daily increase in survival (logit scale) 
+
+# set prior
+
+# set prior on detection and misclassification processes
+Pobs <- 0.95   # ~ dunif(0.9,1)
+PCMoult <-0.84 #~ dunif(0.8,0.9)
+
+   # BIRTH DISTRIBUTION
+mu.bday ~ dunif(10,70) #dnorm(45,0.01)T(20,60)      ## Prior for mean of birth distribution (1 would mean born just before day 0 [t=1], 10 would mean born just before day 9 [t=10])
+sd.bday ~ dunif(1,20)                 ## Prior for standard deviation of birth distribution
+prec.bday <- pow(sd.bday,-2)
+
+
+nborn ~ dunif(100,50000)       ## prior for mean number of births (total across season)
+
+mu.days.on.colony ~ dunif(min.age, max.age)       ## Prior for mean of the number of days on the colony
+sd.days.on.colony ~ dunif(4, 15)        ## Prior for standard deviation of days on colony
+prec.days.on.colony <- pow(sd.days.on.colony,-2)
+
+
+#=================================
+# set the probability of being moulted as a function of age
+#===================================
+
+pmoult.int <- -12   # ~ dnorm(5,1)               # probability of being moult at birth
+pmoult.slope <- 0.6 # ~ dunif(-0.5,0)          # daily decrease in the probability of being moult (increase in probability of moulting)
+for(a in 1:ndays){   # loop past the last possible age
+  logit(pmoult[a]) <- pmoult.int + pmoult.slope*(a-1)    # deterministic for now
+}
+#=================================
+# set the probability of survival as a function of age
+#===================================
+ 
+for(a in 1:(max.age+1)){
+  logit(surv[a]) <- surv.int + surv.slope*(a-1)
+}
+
+#=======================================
+# set the scheduling distributions 
+#=======================================
+  
+   # BIRTH DISTRIBUTION
+nconst_Pb <- 1 - ( pnorm(0,mu.bday, prec.bday) + (1 - pnorm((max.day.birth),mu.bday, prec.bday) ) )  # constant for truncating the births distribution
+Pb[1] <- 0  # can't be born after 0 time has passed in the season
+Pb[2:(max.day.birth+1)] <- (pnorm(1:(max.day.birth), mu.bday, prec.bday) - pnorm(0:(max.day.birth-1), mu.bday, prec.bday))/nconst_Pb   ## Birth schedule
+
+   # TIME ON COLONY
+   # define the probability mass of remaining on the colony for a certain number of days (having left the colony between the previous day and the current day)
+nconst_birth.to.leave <- 1 - ( pnorm(min.age,mu.days.on.colony, prec.days.on.colony) + (1 - pnorm(max.age,mu.days.on.colony, prec.days.on.colony) ) )
+for(day in 1:(min.age+1)){
+  pmass.birth.to.leave[day] <- 0   # can not leave before minimum number of days
+  cprob.remain[day] <- 1
+}
+for(day in (min.age+2):(max.age+1)){   # 1 is day of birth, 2 is 1 day after birth, so on
+  pmass.birth.to.leave[day] <- (pnorm(day-1, mu.days.on.colony, prec.days.on.colony) -  pnorm(day-2, mu.days.on.colony, prec.days.on.colony))/nconst_birth.to.leave      # define probability of leaving on any given age in days
+  cprob.remain[day] <- 1-sum(pmass.birth.to.leave[1:day])  # cumulative probability of remaining white for a specific number of days 
+}
+
+#=======================
+# place cohorts in the proper places over time
+#=======================
+
+# cohort.size ~ dmulti(Pb,trunc(nborn))  # might be able to put this back?
+
+for(c in 1:(max.day.birth+1)){
+  cohort.size[c] ~ dpois(nborn*Pb[c])
+}
+
+for(c in 1:(max.day.birth+1)){    # loop through cohorts
+      # SET ALL PRE-BIRTH ABUNDANCES TO ZERO
+  for(a in 1:(c-1)){    # loop through all days prior to birth
+    for(s in 1:3){      # loop through stages
+      stageN_c[c,a,s] <- 0      # set to zero. the second dimension is converting to absolute time (vs cohort time)
+    }
+  }
+     # SET ABUNDANCES WHILE POTENTIALLY ON COLONY
+  stageN_c[c,c,1] <- cohort.size[c] * 1 * 1 * 1     # probability of being white after a days
+  stageN_c[c,c,2] <- cohort.size[c] * 1 * 1 * 0   # moulted
+  for(a in 2:min( (ndays-c),(max.age+1) ) ){ 
+    stageN_c[c,c+a-1,1] <- cohort.size[c] * cprob.remain[a] * prod(surv[1:a]) * (1-pmoult[a])     # probability of being white after a days
+    stageN_c[c,c+a-1,2] <- cohort.size[c] * cprob.remain[a] * prod(surv[1:a])* pmoult[a]          # moulted
+  }
+  
+  for(a in (max.age+2):(ndays-c)){
+    for(s in 1:2){      # loop through stages
+      stageN_c[c,c+a-1,s] <- 0      #  set to zero after the maximum age
+    }
+  }
+  
+  for(a in 1:(ndays-c)){
+    stageN_c[c,c+a-1,3] <- (nborn*Pb[c])-(stageN_c[c,c+a-1,1]+stageN_c[c,c+a-1,2])  # dead or left
+  }
+}
+  
+  # compute the expected number in each stage for each day of the season (final state process step)
+
+for(t in 1:(ndays-1)){ # loop through days of the season
+  stageN[t,1] <- sum(stageN_c[1:(max.day.birth+1),t,1])  # tot white across all cohorts
+  stageN[t,2] <- sum(stageN_c[1:(max.day.birth+1),t,2])  # tot grey across all cohorts
+  stageN[t,3] <- sum(stageN_c[1:(max.day.birth+1),t,3])  # tot leave across all cohorts
+}
+
+# ========================
+# Observation process
+# ========================
+
+# normal approximation
+
+# for(obs in 1:(length(obsdays))) {
+#   white.mu[obs] <- stageN[obsdays[obs],1] * Pobs
+#   white.sd[obs] <- pow(stageN[obsdays[obs],1] * Pobs,.5)*(1-Pobs)
+#   white.prec[obs] <- pow(white.sd[obs],-2)
+#   moult.mu[obs] <- stageN[obsdays[obs],2] * Pobs
+#   moult.sd[obs] <- pow(stageN[obsdays[obs],2] * Pobs,.5)*(1-Pobs)
+#   moult.prec[obs] <- pow(moult.sd[obs],-2)
+#   wObs[obs] ~ dnorm(white.mu[obs],white.prec[obs])
+#   mObs[obs] ~ dnorm(moult.mu[obs],moult.prec[obs])
+# }
+
+# for(obs in 1:(length(obsdays))) {
+#  wObs[obs] ~ dbinom(Pobs, trunc(stageN[obsdays[obs],1]))   # data node
+#  mObs[obs] ~ dbinom(Pobs, trunc(stageN[obsdays[obs],2]))   # data node
+# }
+
+
+
+WW_MW <- stageN[,1]+stageN[,2]*(1-PCMoult)
+MM <- stageN[,2]*PCMoult  #add misclassification to mObs
+
+for(obs in 1:(length(obsdays))) {
+ wObs[obs] ~ dbinom(Pobs, trunc(WW_MW[obsdays[obs]]))   # data node
+ mObs[obs] ~ dbinom(Pobs, trunc(MM[obsdays[obs]]))   # data node
+}
+
+}
+",file=jagsfile)
+
+
+# data objects for jags -----------------
+
+#Parameters monitored
+params <- c( "mu.bday", "sd.bday","nborn",
+             "mu.days.on.colony","sd.days.on.colony",
+            # "surv.int","surv.slope","pmoult.int","pmoult.slope",
+             "pmass.birth.to.leave","cprob.remain","Pb",
+             "stageN","Pobs","cohort.size")
+             
+
+# Define data
+data <- list(
+  wObs = wObs,
+  mObs = mObs,
+  # amax=amax,
+  ndays=ndays,
+  max.age = max.age,
+  min.age = min.age,
+  max.day.birth = max.day.birth,
+  obsdays=obsdays
+)
+
+inits <- function(){
+  list(
+    mu.bday = 45,
+    sd.bday = 15,
+    mu.days.on.colony = 30,
+    sd.days.on.colony= 7,  
+    nborn = 5000
+    # surv.int = 3,
+    #surv.slope=0.03,
+    # pmoult.int=6,
+    # pmoult.slope = -0.03,
+    # Pobs = 0.95
+   # cohort.size  = 10000*Pb 
+  )
+  
+}
+# inits()
+#######
+# run jags
+
+DEBUG=T
+
+if(DEBUG){
+  
+  nc <- 1   ;   ni <- 5000  ;   nb <- 1000   ;   nt <- 1 ; na <-100
+  
+  Hgpup <- jagsUI::jags(data,inits,params,jagsfile,n.chains=nc,n.adapt=na,               
+                          n.iter=ni,n.burnin=nb,n.thin=nt, parallel = F) 
+}else{
+  
+  nc <- 3   ;   ni <- 500000   ;   nb <- 100000   ;   nt <- 10 ; na <-2000
+  
+  system.time(
+    Hgpup <- jagsUI::jags(data,inits,params,jagsfile,n.chains=nc,n.adapt=na,               
+                          n.iter=ni,n.burnin=nb,n.thin=nt, parallel = T, n.cores = 3) 
+  )
+}
+
+
+
+# Hgpup$sims.list$pres4[1,]
+# Hgpup$sims.list$s4[1,]
+# Hgpup$sims.list$moult[1,]
+# Hgpup$sims.list$leave[1,]
+# 
+# Hgpup$sims.list$whiteCount[1,]
+# Hgpup$sims.list$moultCount[1,]
+# Hgpup$sims.list$sdwhite[1,]^(1/2)
+# Hgpup$sims.list$sdmoult[1,]^(1/2)
+Hgpup$sims.list$nborn
+# Hgpup$sims.list$mu.bday
+# Hgpup$sims.list$mu.trans.s4
+##########################
+# save(Hgpup,file = sprintf("Nborn_Hgpup_%s.RData",Sys.Date()))
+
+# samples <- Hgpup$samples
+# 
+# library(coda)
+# 
+# 
+# sims <- Hgpup$sims.list
+# 
+# sims$Pb[1,]
+# sims$born[1,]
+# 
+# plot(sims$Pb[1,])
+# plot(sims$Ps4[1,])
+# 
+# sims$nborn
+
+
+jagsUI::traceplot(Hgpup,"nborn")
+
+# c( "mu.bday", "sd.bday","nborn","cohort.size","Pb",
+#    "mu.trans.s4","sd.trans.s4",
+#    "mu.trans.m","sd.trans.m",
+#    "mu.trans.l","sd.trans.l",
+#    "pmass.birth.to.s4","pmass.s4.to.moult","pmass.moult.to.leave","cprob.remain.m",
+#    "pres4","s4","moult","leave")#,
+
+jagsUI::traceplot(Hgpup,"mu.bday")
+jagsUI::traceplot(Hgpup,"sd.bday")
+jagsUI::traceplot(Hgpup,"mu.days.on.colony")
+jagsUI::traceplot(Hgpup,"sd.days.on.colony")
+
+
+# jagsUI::traceplot(Hgpup,"stageN[60,3]")
+# jagsUI::traceplot(Hgpup,"leave[60]")
+# jagsUI::traceplot(Hgpup,"surv.int")
+# jagsUI::traceplot(Hgpup,"surv.slope")
+# 
+# jagsUI::traceplot(Hgpup,"pmoult.int")
+# jagsUI::traceplot(Hgpup,"pmoult.slope")
+
+thissim=100
+
+Hgpup$sims.list$stageN[thissim,,3]
+
+plot(Hgpup$sims.list$Pb[thissim,],type="l")
+sum(Hgpup$sims.list$Pb[thissim,])
+
+
+plot(Hgpup$sims.list$pmass.birth.to.leave[thissim,],type="l")
+sum(Hgpup$sims.list$pmass.birth.to.leave[thissim,])
+
+plot(Hgpup$sims.list$stageN[thissim,,1],type="l")
+lines(Hgpup$sims.list$stageN[thissim,,2],col="red")
+
+plot(Hgpup$sims.list$stageN[thissim,,3],type="l")
+
+Hgpup$sims.list$pmoult.int[thissim]
+Hgpup$sims.list$pmoult.slope[thissim]
+
+day=50;sim=thissim
+whitefunc <- function(day,sim=thissim){
+  plogis(Hgpup$sims.list$pmoult.int[sim]+Hgpup$sims.list$pmoult.slope[sim]*day)
+}
+whitefunc(100,thissim)
+curve(whitefunc,0,100)
+
+plot(Hgpup$sims.list$stageN[thissim,,3],type="l",col="green")
+
+Hgpup$sims.list$nborn[thissim]
+
+Hgpup$sims.list$surv.int[thissim]
+Hgpup$sims.list$surv.slope[thissim] 
+
+

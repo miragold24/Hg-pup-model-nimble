@@ -1,5 +1,4 @@
 
-
 # for testing- alternative data generation
 # goal: generate wObs and mObs under the process model
 
@@ -178,6 +177,4 @@ return(results)
 
 
 sim_wm <- generate_obs()
-
-
 
