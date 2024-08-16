@@ -281,17 +281,23 @@ run_model_simulation <- function(simulation_number) {
 }
 
 # Run simulations
-n_simulations <- 15
+n_simulations <- 100
 for (i in 1:n_simulations) {
   run_model_simulation(i)
 }
 
+# Convert each chain to an mcmc object
+mcmc_list <- lapply(samples, as.mcmc)
+# Combine into a single mcmc.list object
+mcmc_list <- as.mcmc.list(mcmc_list)
+# Gelman-Rubin diagnostic to check convergence
+gelman.diag(mcmc_list)
 ################################################################################
 # read in simulation, visualize plots
 # directory to save results tto remote desktop
 output_dir <- "D:/mg349/results/HgNimble_Model_S3"
 # directory local comp
-date <- Sys.Date()
+date <- Sys.Date()-1
 
 # List all RDS files for the current date
 rds_files <- list.files(output_dir, pattern = paste0("HgNimble_Model_S3_.*_", date, "\\.rds$"), full.names = TRUE)
@@ -388,13 +394,15 @@ result_summary <- summary_stats %>%
     lower_hpd = round(lower_hpd, 3),
     upper_hpd = round(upper_hpd, 3)
   )
-
+# Compute precision 1/ (sd^2)
+result_summary <- result_summary %>%
+  mutate(precision = 1 / (sd^2))
 # Print the result summary
 print(result_summary)
 
 # Define the path to save the CSV file
-output_csv_path <- "D:/mg349/results/HgNimble_Model_S3/summary_statistics_HgNimble_S3_sim.csv"
-
+#output_csv_path <- "D:/mg349/results/HgNimble_Model_S3/summary_statistics_HgNimble_S3_sim.csv"
+output_csv_path <-file.path(output_dir, paste0(Sys.Date(),"_HgNimble_Model_S3_","summarystats_sim", ".csv"))
 # Remove the 'hpd_interval' column
 result_summary <- result_summary %>%
   select(-hpd_interval)
@@ -457,7 +465,7 @@ param_labels <- c(
   "Nborn" = "Total Pups Born",
   "sd.bday" = "SD Birthday", 
   "mu.bday" = "Mean Birthday", 
-  "skew.bday" = "Skew Birthday",
+  "skew.bday" = "Skew Birthday"
 )
 
 # Function to calculate HPD intervals
@@ -510,7 +518,4 @@ hpd_intervals <- long_samples %>%
   pdf_file <- paste0("D:/mg349/results/HgNimble_Model_S3/", Sys.Date(), "_", param, "_sim_100_hist_95CI.pdf")
   ggsave(pdf_file, plot = p, device = "pdf", width = 10, height = 6)
 }
-
-# Display the plots
-
 
