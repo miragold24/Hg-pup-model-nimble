@@ -4,8 +4,21 @@
 ###  whitecoat, moult, leave 
 ###
 #===============================================================================
-source("leaveFunction.R")
-simSealsS3 <- function(N = 500, 
+# input_list = list(ndays = 123, amax=123,N=500, mu.bday = 45, sd.bday = 10,
+#                   mu.s4day = 17, sd.s4day = 5,
+#                   mu.mlen = 6, sd.mlen = 2,mu.mday=23,sd.mday=5,
+#                   mu.lday = 31.5, sd.lday = 7,
+#                   skew.bday=5,
+#                   POWhite = 0.98, POWhiteSD = 0.01,
+#                   POMoult = 0.94, POMoultSD = 0.03,
+#                   PCWhite = 1,PCWhiteS4 = 0.75, PCWhiteS4SD = 0.01,
+#                   PCMoult = 0.82, PCMoultSD = 0.09,
+#                   obsdays =  c(33,49,61,75,96)#1:123)#c(35,55, 60, 65, 70, 75, 80,85,90, 95,100,105,110))
+# thisenv <-environment()
+# list2env(input_list, thisenv)
+
+#source("leaveFunction.R")
+simSealsS3 <- function(N = 3000, 
    ndays = 123, amax = 123, mu.bday = 45, sd.bday = 10,
    birthcurve = "skewnormal",
    skew.bday = 5, 
@@ -17,7 +30,7 @@ simSealsS3 <- function(N = 500,
    PCMoult = 0.82, PCMoultSD = 0.09, 
    #PCWhiteS4 = 0.75, PCWhiteS4SD = 0.01,
    #test all days as observed/surveyed, then reduce frequency of obsdays:
-   obsdays = c(35,55, 60, 65, 70, 75, 80,85,90, 95,100,105,110) ,
+   obsdays =  c(33,49,61,75,96),#1:123, #c(35,55, 60, 65, 70, 75, 80,85,90, 95,100,105,110) ,
    #                #c(35, 40, 50, 65, 70, 80, 95)
    #popproc: biological process can be generated as: 
    #         "detcont"=deterministic and continuous
@@ -27,7 +40,7 @@ simSealsS3 <- function(N = 500,
    #          "exact"= obs generated with no variation, 
    #          "normappx"= obs are normal approximated using binomial variance
    #          "binomial" = obs are binomially distributed 
-   obsproc = "binom",seed=2024) {  
+   obsproc = "normappx" ){#,seed=2024) {  
   
   #============================================================================
   ### BIOLOGICAL PROCESS
@@ -45,10 +58,10 @@ simSealsS3 <- function(N = 500,
   ###              -sensitivity analysis: impact of # and timing of surveys
   #============================================================================
   library(lubridate)
-
+  
   # initialize matrices
 
-  set.seed(seed)
+  # set.seed(seed)
   
   if(birthcurve == "lognormal"){
     
@@ -123,7 +136,7 @@ simSealsS3 <- function(N = 500,
   ### simulate perfect birth, moult, leave process
   ###
   if (popproc == "detcont"){
-    N <- 500
+    N <- 3000
       realBorn <- Pb*N 
       
       whitePups <- rep(0, ndays)
@@ -133,10 +146,10 @@ simSealsS3 <- function(N = 500,
         for (i in 1:d){
           age = d-i
           #calculate whitePups
-          whitePups[d]<- whitePups[d] + realBorn[i] * (1 - sum(Pm[1:age])) 
+          whitePups[d]<- whitePups[d] + realBorn[i] * (1 - sum(Pm[1:age])) #* (1 - sum(Pl[1:age]))
           # Calculate moultPups
-          moultPups[d] <- moultPups[d] + realBorn[i] * sum(Pm[1:age]) * 
-            (1-sum(PmPl2$PlGivenm[1:age]))
+          moultPups[d] <- moultPups[d] + realBorn[i] * sum(Pm[1:age]) *(1-sum(PmPl2$PlGivenm[1:age])) #(1 - sum(Pl[1:age]))  
+            #(1-sum(PmPl2$PlGivenm[1:age]))
 
 
         } # end for i
@@ -241,25 +254,35 @@ simSealsS3 <- function(N = 500,
   if (obsproc == "normappx"){
     sdwhite <- sqrt(whitePups * POWhite * (1 - POWhite) + 
                       moultPups * (1 - PCMoult) * POMoult * 
-                      (1 - (1 - PCMoult) * POMoult))
+                      (1-POMoult*(1-PCMoult)))
     sdmoult <- sqrt(moultPups * POMoult * PCMoult * (1 - POMoult * PCMoult))
 
-    whiteCount <- rnorm(n = length(whitePups), mean=whitePups * POWhite + 
-                          moultPups * POMoult * (1 - PCMoult), sd=sdwhite)
-    moultCount <- rnorm(n = length(moultPups), mean= moultPups * POMoult * 
-                          PCMoult, sd=sdmoult)
+    whiteCount <- round(rnorm(n = length(whitePups), mean=whitePups * POWhite + 
+                          moultPups * POMoult * (1 - PCMoult), sd=sdwhite))
+    moultCount <- round(rnorm(n = length(moultPups), mean= moultPups * POMoult * 
+                          PCMoult, sd=sdmoult))
 
    
     # white classified as white:
-    WW <- round(whiteCount)
+    WW <- whiteCount
     # No whitecoats misclassified as moulted
     WM <- 0
     # moulted classified as moulted
-    MM <- round(moultCount)
+    MM <- moultCount
     # This is already acounted for in moultCount calculation (**clunky!**)
     MW <- 0
 
      }
+
+  
+    if (obsproc == "binom_MC"){
+  # #   # add misclassification
+    whiteMC[obs] <- whitePups[obsdays[obs]] + moultPups[obsdays[obs]] * (1-PCMoult)
+    moultMC[obs] <- moultPups[obsdays[obs]] * PCMoult
+    whiteCount <- rbinom(n = length(whiteMC), size = whiteMC, POWhite)
+    moultCount <- rbinom(n = length(moultMC), size = moultMC, POMoult)
+
+      }
 
   # if (obsproc == "binom"){
   #   whiteCount <- rbinom(n = length(whitePups), size = whitePups, POWhite)
@@ -302,11 +325,11 @@ simSealsS3 <- function(N = 500,
   sim.out <- list(realBorn = realBorn, Pb = Pb,Pm = Pm, Pl=PmPl2$PlGivenm,
                    wObs = wObs, mObs = mObs, whiteObs=whiteObs,moultObs=moultObs,
                  whitePups=whitePups,moultPups=moultPups)
-  list2env(sim.out, globalenv())
+  #list2env(sim.out, globalenv())
   return(sim.out)
 
 }
 
-sim_S3<-simSealsS3()
+#sim_S3<-simSealsS3()
 
 
