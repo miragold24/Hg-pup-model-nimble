@@ -93,7 +93,7 @@ transformed data {
 
 parameters {
   vector[K] beta_spline;       // spline coefficients for muBday_col
-
+   real<lower=0> tau_spline;
   real muBday_global;          // Global mean birth date
 
   vector[ncols] nborn_col_raw;
