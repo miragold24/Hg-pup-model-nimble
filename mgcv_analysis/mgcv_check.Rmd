@@ -99,13 +99,14 @@ analysis_data <- muBday_all_years %>%
 
 # Models
 
-I tested six different models to compare approaches for modeling birth timing:
+I tested the following approaches to compare approaches for modeling birth timing:
 
-1.  **Linear**
-2.  **Quadratic**
-3.  **Cubic**
-4.  **Factor smooth**: Year-specific smooth functions
-5.  **Tensor (te)**: Tensor product smooth of distance and year
+1.  **Linear**: ClineDist + Year (also interaction model)
+2.  **Quadratic**: quadratic polynomial for ClineDist + Year (with and without interaction)
+3.  **Cubic**: cubic polynomial for ClineDist + Year (with and without interaction)
+4.  **Factor smooth**: Year-specific cline smooths (independent smooth for each year, no global smooth)
+5. **Factor smooth 2**: Global cline smooth + year-specific deviations 
+5.  **Tensor (te)**: Tensor product smooth over distance and year
 6.  **Tensor (ti)**: Separate smooths plus interaction term for distance and year
 
 ```{r fit-models}
@@ -239,6 +240,19 @@ p_all_models_regions <- ggplot(pred_grid_long,
   )
 
 print(p_all_models_regions)
+
+plot.gam(tensor2_mod, select = 1, main = "ClineDist effect (s)", 
+     shade = TRUE,
+     xlab = "Cline Distance (scaled)", ylab = "s(ClineDist)")
+
+
+plot.gam(tensor2_mod, select = 2, main = "Year effect (s)", 
+     shade = TRUE,
+     xlab = "Year", ylab = "s(Year)")
+
+plot.gam(tensor2_mod, select = 3, scheme = 2, 
+     main = "ClineDist * Year interaction (ti)")
+
 ```
 
 ```{r save-plots}
@@ -253,21 +267,6 @@ print(p_all_models_regions)
 #   height = 16,
 #   dpi = 300
 # )
-
-# Save the ti model marginal effects 
-
-plot.gam(tensor2_mod, select = 1, main = "ClineDist effect (s)", 
-     shade = TRUE,
-     xlab = "Cline Distance (scaled)", ylab = "s(ClineDist)")
-
-
-plot.gam(tensor2_mod, select = 2, main = "Year effect (s)", 
-     shade = TRUE,
-     xlab = "Year", ylab = "s(Year)")
-
-plot.gam(tensor2_mod, select = 3, scheme = 2, 
-     main = "ClineDist x Year interaction (ti)")
-
 
 
 ```
