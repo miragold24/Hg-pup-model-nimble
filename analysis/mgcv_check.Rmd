@@ -1,0 +1,274 @@
+---
+title: "Grey seal birth timing: mgcv"
+author: "MG"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    toc_depth: 3
+    code_folding: show
+    theme: flatly
+    highlight: tango
+    number_sections: false
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = TRUE,
+  warning = FALSE,
+  message = FALSE,
+  fig.width = 12,
+  fig.height = 8,
+  dpi = 300
+)
+```
+
+# Overview
+
+Look at grey seal birth timing (muBday) across different colonies in relation to geographic cline distance and survey year. Multiple models are compared below to help inform direction for full hierarchical modelling approach. Mean birth date estimates are taken from a single-colony STAN model fit to 2012, 2014, 2016,  2019, and 2022 data. 
+
+Libraries
+```{r libraries}
+library(dplyr)
+library(ggplot2)
+library(mgcv)
+library(purrr)
+library(ggrepel)
+library(tidyr)
+library(knitr)
+library(kableExtra)
+```
+
+Load in data
+```{r load-data}
+
+file_muBday <- "C:/GreySealPups/03_analysis/outputs/bluewhale_kts6/muBday_all_years.csv"
+file_coords <- "C:/World-of-Mia_BACKUP/HG_surveyAreas/ColCode_Coords_WithClineDist.csv"
+
+# Load CSVs
+muBday_all_years <- read.csv(file_muBday)
+coords_cline_data <- read.csv(file_coords)
+
+analysis_data <- muBday_all_years %>%
+  rename(
+    ColCode = COLID2, 
+    Year = YEAR, 
+    muBday = muBday_mean
+  ) %>%
+  mutate(ColCode = tolower(ColCode)) %>%
+  left_join(
+    coords_cline_data %>%
+      mutate(ColCode_lower = tolower(Colony.Code)) %>%
+      select(ColCode_lower, ClineDist_m),
+    by = c("ColCode" = "ColCode_lower")
+  ) %>%
+  mutate(
+    ClineDist_scaled = as.numeric(scale(ClineDist_m)),
+    Year_f = factor(Year),
+    Region = case_when(
+      grepl("^ih", ColCode, ignore.case = TRUE) ~ "Inner Hebrides",
+      grepl("^oh", ColCode, ignore.case = TRUE) ~ "Outer Hebrides",
+      grepl("^ork", ColCode, ignore.case = TRUE) ~ "Orkney",
+      grepl("^fof", ColCode, ignore.case = TRUE) ~ "Firth of Forth",
+      grepl("^nee", ColCode, ignore.case = TRUE) ~ "NE England",
+      grepl("^see", ColCode, ignore.case = TRUE) ~ "SE England",
+      .default = "Other"
+    ),
+    Region = factor(Region)
+  )
+
+# year_counts <- table(analysis_data$Year)
+# years_to_keep <- names(year_counts[year_counts >= 50])
+# analysis_data <- analysis_data %>% 
+#   filter(Year %in% years_to_keep)
+
+# colonies_per_year <- analysis_data %>%
+#   group_by(Year) %>%
+#   summarise(
+#     n_Colonies = n_distinct(ColCode),
+#     n_Observations = n(),
+#     Colonies = paste(unique(ColCode), collapse = ", ")
+#   ) %>%
+#   arrange(Year)
+# 
+# kable(colonies_per_year, caption = "Survey Coverage by Year") %>%
+#   kable_styling(bootstrap_options = c("striped", "hover")) %>%
+#   scroll_box(height = "400px")
+```
+
+# Models
+
+I tested six different models to compare approaches for modeling birth timing:
+
+1.  **Linear**
+2.  **Quadratic**
+3.  **Cubic**
+4.  **Factor smooth**: Year-specific smooth functions
+5.  **Tensor (te)**: Tensor product smooth of distance and year
+6.  **Tensor (ti)**: Separate smooths plus interaction term for distance and year
+
+```{r fit-models}
+# Linear
+lm_mod <- lm(muBday ~ ClineDist_scaled + Year_f, data = analysis_data)
+lm_mod2 <- lm(muBday ~ ClineDist_scaled * Year_f, data = analysis_data)
+# Quadratic 
+quad_mod <- gam(muBday ~ poly(ClineDist_scaled, 2) + Year_f, 
+                data = analysis_data)
+quad_mod2 <- gam(muBday ~ poly(ClineDist_scaled, 2) * Year_f, data = analysis_data)
+# Cubic 
+cubic_mod <- gam(muBday ~ poly(ClineDist_scaled, 3) + Year_f, 
+                 data = analysis_data)
+cubic_mod2 <- gam(muBday ~ poly(ClineDist_scaled, 3) * Year_f, data = analysis_data)
+
+## Factor smooth models 
+# Completely independent smooths per year (no global smooth)
+factor_smooth_mod <- gam(muBday ~ s(ClineDist_scaled, by = Year_f, k = 4),
+                         data = analysis_data, method = "REML")
+
+# Global smooth + year-specific deviations
+# k=4 for cline smooths to match ti model
+factor_smooth_mod2 <- gam(muBday ~ s(ClineDist_scaled, k = 4, m = 2) + 
+                            s(ClineDist_scaled, Year_f, bs = "fs", k = 4, m = 2),
+                         data = analysis_data, method = "REML")
+
+# Tensor product models 
+tensor1_mod <- gam(muBday ~ te(ClineDist_scaled, Year, k = c(4, 5)), 
+                   data = analysis_data, method = "REML")
+
+# ti model: k=4 for cline (to match factor_smooth_mod2), k=5 for year
+tensor2_mod <- gam(muBday ~ s(ClineDist_scaled, k = 4) + s(Year, k = 5) +
+                     ti(ClineDist_scaled, Year, k = c(4, 5)),
+                   data = analysis_data, method = "REML")
+
+```
+
+# AIC 
+
+```{r model-comparison}
+aic_results <- AIC(lm_mod,lm_mod2, quad_mod,quad_mod2, cubic_mod,cubic_mod2,factor_smooth_mod, factor_smooth_mod2,tensor1_mod, tensor2_mod)
+aic_results <- aic_results %>%
+  mutate(
+    Model = c("Linear","Linear interaction", "Quadratic", "Quadratic interaction", "Cubic", "Cubic interaction","Factor smooth","Factor smooth2", "Tensor (te)", "Tensor (ti)")
+  ) %>%
+  select(Model, df, AIC) %>% 
+  arrange(AIC)
+kable(aic_results, digits = 2) %>%
+  kable_styling(bootstrap_options = c("striped", "hover")) %>%
+  row_spec(1, bold = TRUE )
+
+```
+
+# Plots
+
+```{r generate-predictions}
+# Create prediction grid for observed data range for each year
+pred_grid <- analysis_data %>%
+  split(.$Year_f) %>%
+  map_dfr(~{
+    cline_range <- range(.x$ClineDist_scaled, na.rm = TRUE)
+    new_cline_dist <- seq(cline_range[1], cline_range[2], length.out = 100)
+    data.frame(
+      ClineDist_scaled = new_cline_dist,
+      Year_f = first(.x$Year_f),
+      Year = first(.x$Year)
+    )
+  })
+
+pred_grid$muBday_lm <- predict(lm_mod, newdata = pred_grid)
+pred_grid$muBday_lm2 <- predict(lm_mod2, newdata = pred_grid)
+pred_grid$muBday_quad <- predict(quad_mod, newdata = pred_grid)
+pred_grid$muBday_quad2 <- predict(quad_mod2, newdata = pred_grid)
+pred_grid$muBday_cubic <- predict(cubic_mod, newdata = pred_grid)
+pred_grid$muBday_cubic2 <- predict(cubic_mod2, newdata = pred_grid)
+#pred_grid$muBday_factor_smooth_default_k <- predict(factor_smooth_mod_default_k, newdata = pred_grid)
+pred_grid$muBday_factor_smooth <- predict(factor_smooth_mod, newdata = pred_grid)
+pred_grid$muBday_factor_smooth2 <- predict(factor_smooth_mod2, newdata = pred_grid)
+pred_grid$muBday_tensor1 <- predict(tensor1_mod, newdata = pred_grid)
+pred_grid$muBday_tensor2 <- predict(tensor2_mod, newdata = pred_grid)
+
+model_order <- c(
+  "Linear", "Linear interaction", "Quadratic","Quadratic interaction", "Cubic","Cubic interaction","Factor smooth", "Factor smooth2","Tensor (te)", "Tensor (ti)"
+)
+
+pred_grid_long <- pred_grid %>%
+  pivot_longer(
+    cols = starts_with("muBday_"),
+    names_to = "Model_Type",
+    values_to = "Prediction"
+  ) %>%
+ mutate(
+  Model_Type = gsub("muBday_", "", Model_Type),
+  Model_Type = case_when(
+    Model_Type == "lm" ~ "Linear",
+    Model_Type == "lm2" ~ "Linear interaction",
+    Model_Type == "quad" ~ "Quadratic",
+     Model_Type == "quad2" ~ "Quadratic interaction",
+    Model_Type == "cubic" ~ "Cubic",
+    Model_Type == "cubic2" ~ "Cubic interaction",
+    Model_Type == "factor_smooth" ~ "Factor smooth",
+    Model_Type == "factor_smooth2" ~ "Factor smooth2",
+    Model_Type == "tensor1" ~ "Tensor (te)",
+    Model_Type == "tensor2" ~ "Tensor (ti)",
+    TRUE ~ Model_Type
+  ),
+  Model_Type = factor(Model_Type, levels = model_order)
+)
+
+p_all_models_regions <- ggplot(pred_grid_long, 
+                                aes(x = ClineDist_scaled, y = Prediction, color = Year_f)) +
+  geom_point(data = analysis_data, aes(y = muBday, shape = Region), 
+             alpha = 0.5, size = 2) +
+  geom_line(linewidth = 1.2) +
+  scale_shape_manual(
+    values = c("Inner Hebrides" = 16, "Outer Hebrides" = 17, 
+               "Orkney" = 15, "Firth of Forth" = 12, 
+               "NE England" = 8, "SE England" = 1, "Other" = 4)
+  ) +
+  facet_wrap(~ Model_Type, scales = "free_y", ncol = 2) +
+  labs(
+    x = "Cline distance (scaled)",
+    y = "Mean birth date (muBday)",
+    color = "year",
+    shape = "region"
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(
+    strip.text = element_text(face = "bold", size = 11),
+    legend.position = "right"
+  )
+
+print(p_all_models_regions)
+```
+
+```{r save-plots}
+
+# output_dir <- "C:/GreySealPups/03_analysis/outputs/bluewhale_kts6/figures"
+# dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
+# 
+# ggsave(
+#   filename = file.path(output_dir, "all_models_comparison_by_year_region.png"),
+#   plot = p_all_models_regions,
+#   width = 14,
+#   height = 16,
+#   dpi = 300
+# )
+
+# Save the ti model marginal effects 
+
+plot.gam(tensor2_mod, select = 1, main = "ClineDist effect (s)", 
+     shade = TRUE,
+     xlab = "Cline Distance (scaled)", ylab = "s(ClineDist)")
+
+
+plot.gam(tensor2_mod, select = 2, main = "Year effect (s)", 
+     shade = TRUE,
+     xlab = "Year", ylab = "s(Year)")
+
+plot.gam(tensor2_mod, select = 3, scheme = 2, 
+     main = "ClineDist x Year interaction (ti)")
+
+
+
+```
+
