@@ -1,0 +1,106 @@
+source('HgSim_HV7.R')
+getwd()
+
+library(cmdstanr)
+
+model_path <- "greysealpups_HV7_estSurv_DetOpt2.stan"
+hsurv_mod  <- cmdstan_model(model_path)
+
+
+sim_data<-simHV7(seed = 7665,
+                 ncols = 10,
+                 nyears = 1,
+                 muMoult=23,
+                 obsdays = seq(30, 85, by = 12),
+                 # Hyperparameters for birth 
+                 hyper_muBday = 34,
+                 hyper_sdmuBday = 2,  # adjust depending on mimicking regional with smaller SD, or all UK - greater SD
+                 hyper_sdBday_mu = 0.05,
+                 hyper_sdBday_sd = 0.05)
+# sim_data
+# sim_data$nborn_col_year
+# sim_data$obs_vector_m
+stan_data <- list(
+  nsurveys     = sim_data$nsurveys,
+  nstates      = 5,
+  ndays        = 123,
+  nobsstates   = 3,
+  nvisits      = sim_data$nvisits,
+  ncols        = sim_data$ncols,
+  
+  colid_svy    = sim_data$colid_svy,
+  nvisits_svy  = sim_data$nvisits_svy,
+  
+  obs_vector_w = sim_data$obs_vector_w,
+  obs_vector_m = sim_data$obs_vector_m,
+  obs_vector_d = sim_data$obs_vector_d,
+  obsdays_svy  = sim_data$obsdays_svy,
+  
+  est_pobs_d   = 0,   # set to 1 if you want to estimate
+  est_pobs_w   = 0,
+  est_pobs_m   = 0,
+  est_pcm      = 0
+)
+
+
+init_fun <- function() {
+  list(
+    nborn_col_raw = rep(0, stan_data$ncols),
+    muBday = 40,
+    sdmuBday = 1.5,
+    muBday_col_raw = rep(0, stan_data$ncols),
+    sd_sdBday = 1.0,
+    sdBday_col_raw = rep(0, stan_data$ncols),
+    muLeave_raw = 1.0,
+    sdLeave_raw = 1.0,
+    muSurvInt = 2.0,
+    sdSurvInt = 1.0,
+    survInt_col_raw = rep(0, stan_data$ncols),
+    survSlope = 0.1,
+    pobs_d_est = 0.85,
+    pobs_w_est = 0.98,
+    pobs_m_est = 0.90,
+    pcm_est = 0.8
+    
+    
+  )
+}
+
+fit_sim <- hsurv_mod$sample(
+  data              = stan_data,
+  chains            = 2,
+  parallel_chains   = 2,
+  iter_warmup       = 250,
+  iter_sampling     = 500,
+  refresh           = 50,
+  init              = init_fun,
+  max_treedepth     = 15,
+  adapt_delta       = 0.95,
+  save_cmdstan_config = TRUE
+
+)
+fim_sim_df<-fit_sim$summary()
+fit_sim$summary(variables = c("nborn_col","muBday", "sdmuBday","muLeave","sdLeave"))
+
+# Load date string 
+now_tag <- format(Sys.Date(), "%Y-%m-%d")
+
+output_dir <- "C:/World-of-Mia_BACKUP/Stan/stan_fits/simulation"
+#output_dir <- "local_raid/mg349/output/stan_fits/simulation"
+if (!dir.exists(output_dir)) dir.create(output_dir, recursive = TRUE)
+
+# Save fit object
+saveRDS(fit_sim, file = file.path(output_dir, paste0("fit_sim_HV7_", now_tag, ".rds")))
+
+# Extract and save summary
+summary_df <- fit_sim$summary()
+saveRDS(summary_df, file = file.path(output_dir, paste0("fit_sim_HV7_summary_", now_tag, ".rds")))
+write.csv(summary_df, file = file.path(output_dir, paste0("fit_sim_HV7_summary_", now_tag, ".csv")), row.names = FALSE)
+
+draws_array <- fit_sim$draws(format = "array")
+saveRDS(list(draws = draws_array, summary = summary_df), 
+        file = file.path(output_dir, paste0("fit_sim_HV7_complete_", now_tag, ".rds")))
+
+
+
+

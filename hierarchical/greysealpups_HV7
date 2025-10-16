@@ -1,0 +1,217 @@
+functions {
+  vector skewnormBDFunction(real mu, real sigma, real alpha, int nsteps, vector days){
+    vector[nsteps] xvec;
+    for (i in 1:nsteps) {
+      xvec[i] = exp(skew_normal_lpdf(days[i] | mu, sigma, alpha));
+    }
+    return xvec / sum(xvec);
+  }
+
+  vector hazFunction(real mu, real std, int nsteps, int dstep){
+    real prob;
+    vector[nsteps] hazprob;
+    hazprob[1] = normal_cdf(1*dstep | mu, std);
+    for (s in 2:nsteps){
+      prob = normal_cdf(s*dstep | mu, std) - normal_cdf((s-1)*dstep | mu, std);
+      hazprob[s] = (1 - normal_cdf((s-1)*dstep | mu, std)) < 1e-6 ? 1 : prob / (1 - normal_cdf((s-1)*dstep | mu, std));
+    }
+    return hazprob;
+  }
+
+  matrix transMatrix(real xphi, real xgamma, real xzeta, real xchi, int stages, int dstep){
+    matrix[stages, stages] matarray = rep_matrix(0, stages, stages);
+    matarray[1,1] = pow(xphi, dstep) * (1 - xgamma) * (1 - xzeta);
+    matarray[2,1] = pow(xphi, dstep) * xgamma * (1 - xzeta);
+    matarray[4,1] = 1 - pow(xphi, dstep);
+
+    matarray[2,2] = pow(xphi, dstep) * (1 - xzeta);
+    matarray[3,2] = pow(xphi, dstep) * xzeta;
+    matarray[4,2] = 1 - pow(xphi, dstep);
+
+    matarray[4,4] = pow(xchi, dstep);
+    matarray[5,4] = 1 - pow(xchi, dstep);
+
+    matarray[3,3] = 1;
+    matarray[5,5] = 1;
+    return matarray;
+  }
+}
+
+data {
+  int<lower=0> nsurveys;
+  int<lower=0> nstates;
+  int<lower=0> ndays;
+  int<lower=0> nobsstates;
+  int<lower=0> nvisits;
+  int<lower=0> ncols;
+
+   array[nsurveys] int<lower=1, upper=ncols> colid_svy;  // colony index for each survey
+  array[nsurveys] int<lower=0>            nvisits_svy;  // visits in each survey
+
+  array[nvisits] int obs_vector_w;        
+  array[nvisits] int obs_vector_m;        
+  array[nvisits] int obs_vector_d;        
+  array[nvisits] int<lower=0> obsdays_svy;  
+
+  //  Indicator flags for estimating observation parameters
+  int<lower=0, upper=1> est_pobs_d; // 1 to estimate, 0 to fix
+  int<lower=0, upper=1> est_pobs_w;
+  int<lower=0, upper=1> est_pobs_m; 
+  int<lower=0, upper=1> est_pcm;    
+}
+
+transformed data {
+  int daysPerBin = 5;
+  int nIntervals_s = ndays %/% daysPerBin;
+
+   array[nvisits] int obsdays_bin;
+  for (v in 1:nvisits) {
+    obsdays_bin[v] = obsdays_svy[v] %/% daysPerBin;
+  }
+
+  int nIntervals_c = min(20, nIntervals_s);  
+  vector[nIntervals_c] cohort_days;
+  for (z in 1:nIntervals_c) {
+    cohort_days[z] = z * daysPerBin - 0.5 * daysPerBin;
+  }
+
+  real muMoult = 23;
+  real sdMoult = 5;
+  vector[nIntervals_s] xgamma = hazFunction(muMoult, sdMoult, nIntervals_s, daysPerBin);
+
+  real xchi = inv_logit(3.5);
+}
+
+parameters {
+  vector[ncols] nborn_col_raw;
+  real muBday;
+  real<lower=0> sdmuBday;
+  vector[ncols] muBday_col_raw;
+  real<lower=0.01> sdBday_raw;
+  real<lower=0> skewBday;
+
+  real muLeave_raw;
+  real<lower=0> sdLeave_raw;
+
+  real muSurvInt;
+  real<lower=0> sdSurvInt;
+  vector[ncols] survInt_col_raw;
+
+  real survSlope_raw;
+
+  real<lower=0.7, upper=1> pobs_d_est;
+  real<lower=0.7, upper=1> pobs_w_est;
+  real<lower=0.7, upper=1> pobs_m_est;
+  real<lower=0, upper=1> pcm_est;
+}
+
+transformed parameters {
+  vector[ncols] nborn_col;
+  for (j in 1:ncols) {
+    real nborn_scaled = fmin(fmax(nborn_col_raw[j], -2), 2);
+    nborn_col[j] = exp(5.0 + 2.0 * nborn_scaled);
+  }
+
+  vector[ncols] muBday_col;
+  for (j in 1:ncols)
+    muBday_col[j] = muBday + sdmuBday * muBday_col_raw[j];
+
+  real sdBday = 0.5 + 5.0 * sdBday_raw;
+  real muLeave = exp(3.5 + 0.1 * muLeave_raw);
+  real sdLeave = 1 + 5.0 * sdLeave_raw;
+
+  vector[nIntervals_s] xzeta = hazFunction(muLeave, sdLeave, nIntervals_s, daysPerBin);
+
+  vector[ncols] survInt_col = muSurvInt + sdSurvInt * survInt_col_raw;
+  real survSlope = exp(survSlope_raw);
+
+  // Observation probabilities:
+  real pobs_d = est_pobs_d == 1 ? pobs_d_est : 0.85;
+  real pobs_w = est_pobs_w == 1 ? pobs_w_est : 0.98;
+  real pobs_m = est_pobs_m == 1 ? pobs_m_est : 0.9;
+  real pcm = est_pcm == 1 ? pcm_est : 0.8;
+}
+
+model {
+  nborn_col_raw ~ normal(0, 1);
+
+  muBday ~ normal(45, 10);
+  sdmuBday ~ gamma(2, 1);
+  muBday_col_raw ~ std_normal();
+  sdBday_raw ~ gamma(1, 1);
+  skewBday ~ normal(0, 5);
+
+  muLeave_raw ~ std_normal();
+  sdLeave_raw ~ gamma(1, 1);
+
+  muSurvInt ~ normal(2, 1);
+  sdSurvInt ~ gamma(1, 1);
+  survInt_col_raw ~ std_normal();
+
+  survSlope_raw ~ normal(log(0.1), 0.5);
+
+  if (est_pobs_d == 1)
+    pobs_d_est ~ beta(35, 5);
+  if (est_pobs_w == 1)
+    pobs_w_est ~ beta(45, 5);
+  if (est_pobs_m == 1)
+    pobs_m_est ~ beta(90, 10);
+  if (est_pcm == 1)
+    pcm_est ~ beta(80, 20);
+
+  vector[ndays] daysvec;
+  for (i in 1:ndays)
+    daysvec[i] = i;
+
+  array[ncols] vector[ndays] xphi;
+  for (c in 1:ncols)
+    xphi[c] = inv_logit(survInt_col[c] + survSlope * daysvec);
+
+  matrix[nstates, nobsstates + 1] obsMatrix = rep_matrix(0, nstates, nobsstates + 1);
+  obsMatrix[1, 1] = pobs_w;
+  obsMatrix[1, 4] = 1 - pobs_w;
+  obsMatrix[2, 1] = pobs_m * (1 - pcm);
+  obsMatrix[2, 2] = pobs_m * pcm;
+  obsMatrix[2, 4] = 1 - pobs_m;
+  obsMatrix[3, 4] = 1;
+  obsMatrix[4, 3] = pobs_d;
+  obsMatrix[4, 4] = 1 - pobs_d;
+  obsMatrix[5, 4] = 1;
+
+  vector[nstates] tempCohortVec;
+  array[nIntervals_s] vector[nstates] stageN;
+  row_vector[nobsstates + 1] lambda_obs_vector;
+  vector[nIntervals_c] Pb;
+
+  int pos = 1;
+  for (s in 1:nsurveys) {
+    Pb = skewnormBDFunction(muBday_col[colid_svy[s]], sdBday, skewBday, nIntervals_c, cohort_days);
+    vector[nIntervals_c] cohortSizeBin = nborn_col[colid_svy[s]] * Pb;
+
+    array[nIntervals_s] matrix[nstates, nstates] matarray;
+    for (i in 1:nIntervals_s)
+      matarray[i] = transMatrix(xphi[colid_svy[s]][(i - 1) * daysPerBin + 1], xgamma[i], xzeta[i], xchi, nstates, daysPerBin);
+
+    for (a in 1:nIntervals_s)
+      stageN[a] = rep_vector(0, nstates);
+
+    for (h in 1:nIntervals_c) {
+      tempCohortVec = rep_vector(0, nstates);
+      tempCohortVec[1] = cohortSizeBin[h];
+      stageN[h] += tempCohortVec;
+
+      for (a in 1:(nIntervals_s - h)) {
+        tempCohortVec = matarray[a] * tempCohortVec;
+        stageN[h + a] += tempCohortVec;
+      }
+    }
+
+    for (v in 1:nvisits_svy[s]) {
+      lambda_obs_vector = to_row_vector(stageN[obsdays_bin[pos]]) * obsMatrix;
+      obs_vector_w[pos] ~ poisson(lambda_obs_vector[1]);
+      obs_vector_m[pos] ~ poisson(lambda_obs_vector[2]);
+      obs_vector_d[pos] ~ poisson(lambda_obs_vector[3]);
+      pos += 1;
+    }
+  }
+}

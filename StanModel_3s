@@ -1,0 +1,299 @@
+//refactoring nimble model in stan 
+//updated: moult/leave - hazard functions
+// binned days of season / transitions
+// matrix formulation for transitions and observations
+// poisson likelihood
+
+
+functions {
+  
+  // vector normBDFunction(real mu, real std, int nsteps, int dstep, vector days){
+  //   //simplex[nsteps] toret;
+  //   vector[nsteps] xvec = (exp(-1*(days-mu)^2/(2*std^2)) );
+  //   xvec = xvec/sum(xvec);
+  //   //toret = softmax(xvec);
+  //   return(xvec);
+  // }
+    
+    vector skewnormBDFunction(real mu, real sigma, real alpha, int nsteps, int dstep, vector days){
+    vector[nsteps] xvec;
+    for (i in 1:nsteps) {
+      xvec[i] = exp(skew_normal_lpdf(days[i] | mu, sigma, alpha));
+    }
+    return xvec / sum(xvec);
+  }
+
+
+  vector hazFunction(real mu, real std, int nsteps, int dstep){
+    real prob;         // temporary structure- probability mass of transitioning within each time interval
+    vector[nsteps] hazprob;      // hazard for each bin (prob of transitioning within this time interval, conditional on being in the interval at the start of the time bin)
+    hazprob[1] = normal_cdf((1*dstep)|mu,std);     // prob of remaining in state over first dstep days of life
+    for (s in 2:nsteps){     // can we vectorize this?
+      prob = normal_cdf((s*dstep)|mu,std) - normal_cdf(((s-1)*dstep)|mu,std);                // prob of remaining in state over this time bin, unconditional
+      hazprob[s] = (1-normal_cdf(((s-1)*dstep)|mu,std))<0.000001 ? 1.0 : prob/(1-normal_cdf(((s-1)*dstep)|mu,std));         // prob of remaining in state over this time bin, conditional on being in the state at the start of the period
+    }
+    return(hazprob);
+  }
+  
+  
+  //transition matrix
+  
+  matrix transMatrix(real xphi,real xgamma,real xzeta, real xchi, int stages, int dstep){
+    matrix[stages,stages] matarray = rep_matrix(0,stages,stages); 
+    matarray[1,1]=xphi^dstep * (1-xgamma) *(1-xzeta);  # W to W  survive and not moult and not leave # if you want to remove survival set xphi to 1. 
+    matarray[2,1]=xphi^dstep * xgamma *(1-xzeta);  # W to M   survive and moult and not leave
+    matarray[3,1]= xphi^dstep * xzeta ;# W to LA        # survive and leave
+    matarray[4,1]=(1-xphi^dstep) ;#* chi             # W to D
+    matarray[2,2]=xphi^dstep * (1-xzeta) ;  # M to M
+    matarray[3,2]=xphi^dstep * xzeta  ;     # M to LA
+    matarray[4,2]=(1-xphi^dstep); #* pi       # M to D
+    matarray[4,4]=xchi^dstep ;  # D to D 
+    matarray[5,4]=1-xchi^dstep ;# D tp LD
+    matarray[3,3]=1  ;# LA is absorbing
+    matarray[5,5]=1  ;# LD is also absorbing
+    
+    return(matarray);
+  }
+  
+  
+} //end of functions block
+
+
+data {
+
+  int <lower=0> nstates;                            // number of pup states
+  int <lower=0> maxDayBirth;                        // last day of potential births
+  int <lower=0> ndays;                              // number of days in the season
+  int <lower=0> nobsstates;                        // number of observable states
+  int <lower=0> nsurveys;                           // number of surveys
+  array[nsurveys,nobsstates] int obs_vector;       // MAIN DATA: counts of pups in each class for each survey
+  array[nsurveys] int <lower=0> obsdays;            // date (days since start of season) at which each survey is conducted
+  //array[maxDayBirth] int <lower=0> cohndx;          // for each possible birth day, assign to a particular cohort
+}
+ 
+transformed data {        // transformed data: pre-set information- only computed once
+
+  int <lower=0> daysPerBin=4;   // DEFINE TIME BINS
+  
+  // DEFINE TIME BINS FOR SEASON
+  int nIntervals_s=ndays/daysPerBin;
+  
+  array[nsurveys] int <lower=0> obsdays_bin; 
+  for(z in 1:nsurveys) obsdays_bin[z] = obsdays[z]/daysPerBin;
+  
+  // print("obsdays_bin = ", obsdays_bin) ;
+  
+  // DEFINE COHORT BINS
+  int <lower=0> nIntervals_c=25;
+  vector [nIntervals_c] cohort_days;
+  for(z in 1:nIntervals_c){
+    cohort_days[z] = z*daysPerBin-2.0;
+  } 
+  
+  // vector[nIntervals_c] dir_alpha;
+  // dir_alpha = rep_vector(1, nIntervals_c);
+  
+  // SURVIVAL
+  real <lower=0> survInt=4;      // set survival (fixed for now)
+  real <lower=0> survSlope=0.1;  
+  vector <lower=0,upper=1>  [ndays] xphi;
+  for (a in 1:ndays){
+    xphi[a]=inv_logit(survInt+survSlope*(a-1));
+  }
+  
+  // print("xphi = ", xphi) ;
+  
+  // CARCASS SURVIVAL
+  real <lower=0> pcarcSurvInt=4;        // carcass survival
+  vector <lower=0,upper=1> [ndays] xchi;
+  for (a in 1:ndays){
+    xchi[a]=inv_logit(pcarcSurvInt);
+  }
+         
+         // MOULT                              //moult process
+  real <lower=0> muMoult = 23;  
+  real <lower=0> sdMoult = 5; 
+  vector <lower=0,upper=1>  [ndays/daysPerBin]  xgamma;
+  xgamma = hazFunction(muMoult,sdMoult,nIntervals_s,daysPerBin);
+  
+  
+       // LEAVE
+ // real<lower=0> sdLeave = 5;
+   
+  // print("xgamma (moult schedule) = ", xgamma) ;
+ //Detection
+// real pobs_d = 0.95;
+// real pobs_w = 0.95;
+// real pobs_m = 0.95;
+// real pcm = 0.8;
+  
+} // end of transformed data block
+
+parameters{
+  real nborn_raw;         // "superpopulation": total number born across season   TRY REFACTORING
+  
+  real muBday_raw;             // just use normal for now
+  real<lower=0> sdBday_raw;
+  real<lower=0> alphaBday_raw;
+  // simplex[nIntervals_c] Pb;  // probability of birth on each interval- simplex ensures probs sums to 1
+  
+  real  muLeave_raw;   // mean leave date-  again, TRY REFACTORING
+  real <lower=0>  sdLeave_raw;    // standard deviation of leave date- again TRY REFACTORING
+  
+  //obs params
+   real <lower=0.8,upper=1.0> pobs_d;      // prob of observing deads
+   real <lower=0.0,upper=1.0> pobs_w;      // prob of observing whites
+   real <lower=0.0,upper=1.0> pobs_m;      // prob of observing moulted
+   real <lower=0.0,upper=1.0> pcm;         // prob of misclassifying moulted
+   real <lower=0,upper=1> pcw;
+
+} //end parameters block
+
+
+transformed parameters {
+    // TRY REFACTORED PARAMS FOR NBORN, MULEAVE ETC...
+// real nborn;
+// real muBday;
+// real sdBday;
+// real muLeave;
+// real alphaBday;
+// real<lower=0> sdLeave;
+// sdLeave = 1+sdLeave_raw*5.0;  //shift and rescale (might need to force a little distance from zero)
+// nborn = 1000 + nborn_raw*500;   //shift and scale
+// muBday = 40.0 + muBday_raw*10.0;  //shift and scale
+// sdBday = sdBday_raw*6;  //rescale
+// alphaBday =  alphaBday_raw * 5;  
+// muLeave = 30.0 + muLeave_raw*2.5;   //shift and scale
+//sdLeave = 1+sdLeave_raw*5.0;  //shift and rescale (might need to force a little distance from zero)
+  real nborn = exp(5.0 + 2.0*nborn_raw);   // changed to log scale
+
+  real muBday = exp(4.2 + 0.15*muBday_raw);   // changed to log scale
+  real sdBday = 0.5+sdBday_raw*5.0;
+  real alphaBday =  alphaBday_raw * 5;  
+
+  real muLeave = exp(3.5 + 0.1*muLeave_raw);
+  real sdLeave = 0.5 + sdLeave_raw*5.0;  //shift and rescale (might need to force a little distance from zero)
+
+}
+
+//declare likelihood and priors
+model{
+  
+  // NBORN
+nborn_raw ~ std_normal();  
+
+  // BIRTHDAY
+muBday_raw ~ std_normal();      // use normal here for now- stan also has a built in skew normal
+sdBday_raw ~ gamma(0.1,0.1);    // seems to work okay- plenty of room to explore?
+alphaBday_raw ~ std_normal(); // only allowing for positive skew
+//alphaBday_raw ~ std_normal(); // skewness of birth distribution - moderately vague prior
+// print("muBday_raw = ", muBday_raw) ;
+// print("muBday = ", muBday) ;
+// print("sdBday = ", sdBday) ;
+// print("nborn = ", nborn) ;
+
+ // LEAVING SUCCESSFULLY
+muLeave_raw ~ std_normal();   // was uniform 20,40
+sdLeave_raw ~ gamma(1,1);    // was normal 1,10
+
+// print("muLeave = ", muLeave) ;
+// print("sdLeave = ", sdLeave) ;
+
+  // DETECTION
+pobs_d ~  beta(45,5);     // strong priors
+pobs_w ~ beta(45,5);
+pobs_m ~ beta(45,5);
+pcm ~ beta(35,5);
+pcw ~ beta(35,5);
+
+    // birth process
+vector[nIntervals_c] Pb;
+//Pb = normBDFunction(muBday, sdBday, nIntervals_c, daysPerBin, cohort_days);     // (normal_cdf(upper_bin_limits[z]|muBday,sdBday) - normal_cdf(lower_bin_limits[z]|muBday,sdBday))*100 ;
+Pb = skewnormBDFunction(muBday, sdBday,alphaBday, nIntervals_c, daysPerBin, cohort_days);  
+// print("Pb = ",Pb);
+
+// Pb ~ dirichlet(dir_alpha);   // 
+// print("Pb = ",Pb);
+
+//leave process
+vector [nIntervals_s] xzeta;
+xzeta = hazFunction(muLeave,sdLeave,nIntervals_s,daysPerBin);
+// print("xzeta = ",xzeta);
+
+// local variables defined within model
+vector [nIntervals_c] cohortSizeBin; 
+//vector [maxDayBirth] cohortSizeDaily;
+
+cohortSizeBin = nborn*Pb;  // distribute nborn across cohorts
+// print("cohort size is ",cohortSizeBin);
+
+//  for (c in 1:maxDayBirth){
+//    cohortSizeDaily[c] = cohortSizeBin[cohndx[c]]/daysPerBin; 
+//  } 
+// print("cohort size day 10 = ",cohortSizeDaily[10]);
+// print("cohort size day 20 = ",cohortSizeDaily[20]);
+// print("cohort size day 30 = ",cohortSizeDaily[30]);
+ 
+ 
+// transition matrix (one matrix defined per day of cohort age)
+array[nIntervals_s] matrix[nstates,nstates] matarray;
+for (i in 1:nIntervals_s){
+  matarray[i] = transMatrix(xphi[((i-1)*daysPerBin)+1],xgamma[i],xzeta[i],xchi[((i-1)*daysPerBin)+1],nstates,daysPerBin);
+}
+// print("matarray5 =",matarray[5]);
+// print("matarray10 =",matarray[10]);
+// print("matarray15 =",matarray[15]);
+// print("matarray20 =",matarray[20]);
+//place cohorts over time 
+
+vector[nstates] tempCohortVec;
+array[nIntervals_s] vector[nstates] stageN;
+for(z in 1:nIntervals_s) stageN[z] = rep_vector(0,nstates);
+
+for(c in 1:nIntervals_c){   // loop through cohorts
+  tempCohortVec = rep_vector(0,nstates);
+  tempCohortVec[1] = cohortSizeBin[c];  // initialized the cohort at age 0
+  stageN[c] += tempCohortVec;  // add to the cumulative matrix of pups in each class
+  for(a in 1:(nIntervals_s-c)){   // loop through age of cohort
+    tempCohortVec = matarray[a]*tempCohortVec;
+    stageN[c+a] += tempCohortVec;  // add to the cumulative matrix of pups in each class
+  }
+}
+// print("stageN interval 10 = ",stageN[10]);
+
+// observation matrix
+
+matrix[nstates,nobsstates+1]  obsMatrix=rep_matrix(0,nstates,nobsstates+1) ; 
+obsMatrix[1,1]= pobs_w* pcw;         # Wreal -> Wobs 
+obsMatrix[1,2] = pobs_w * (1 - pcw);  #Wreal -> Mobs
+obsMatrix[1,4]= 1-pobs_w;        # Wreal -> Unobs
+obsMatrix[2,1]= pobs_m*(1-pcm);  # Mreal -> Wobs
+obsMatrix[2,2]= pobs_m * pcm;   # Mreal -> Mobs
+obsMatrix[2,4]= 1-pobs_m;      # Mreal -> Unobs 
+obsMatrix[3,4]= 1;          # Lreal -> Unobs 
+obsMatrix[4,3]= pobs_d;        # Dreal -> Dobs  
+obsMatrix[4,4]= 1-pobs_d;     # Dreal -> Unobs  
+obsMatrix[5,4]= 1 ;         # LDreal -> Unobs 
+
+array[nsurveys] row_vector[nobsstates+1] lambda_obs_vector;
+for(obs in 1:nsurveys){
+  lambda_obs_vector[obs] = stageN[obsdays_bin[obs]]' * obsMatrix ;
+  
+  // print("lambda_obs_vector_nsurvs =",lambda_obs_vector[obs]);
+  // print("log prob before pois = ", target());
+  
+  obs_vector[obs,1] ~ poisson(lambda_obs_vector[obs,1] ) ; # data node- observed whites
+  obs_vector[obs,2] ~ poisson(lambda_obs_vector[obs,2] ) ; # data node- observed moulteds
+  obs_vector[obs,3] ~ poisson(lambda_obs_vector[obs,3] ) ; # data node- observed deads
+  
+  // print("log prob after pois = ", target());
+
+}
+
+} // end of model block 
+
+generated quantities {
+ //  vector[nIntervals_c] Pb_out;
+  // Pb_out = skewnormBDFunction(muBday, sdBday, alphaBday, nIntervals_c, daysPerBin, cohort_days);
+}
+
