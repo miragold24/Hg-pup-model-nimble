@@ -27,6 +27,7 @@ knitr::opts_chunk$set(
 # Overview
 
 Look at grey seal birth timing (muBday) across different colonies in relation to geographic cline distance and survey year. Multiple models are compared below to help inform direction for full hierarchical modelling approach. Mean birth date estimates are taken from a single-colony STAN model fit to 2012, 2014, 2016,  2019, and 2022 data. 
+Note: North Sea (East Scotland (i.e. Firth of Forth), Northeast England, Southeast England) pup production estimates were available for 2012, 2014, 2016, 2018, 2021 and 2023 but the estimates for 2012 - 2016 (inclusive) for NE and SE England were from ground surveys so we do not have birth curves for these. - DJFR
 
 Libraries
 ```{r libraries}
@@ -99,7 +100,7 @@ analysis_data <- muBday_all_years %>%
 
 # Models
 
-I tested the following approaches to compare approaches for modeling birth timing:
+I tested the following model types to compare approaches for modeling birth timing:
 
 1.  **Linear**: ClineDist + Year (also interaction model)
 2.  **Quadratic**: quadratic polynomial for ClineDist + Year (with and without interaction)
