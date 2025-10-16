@@ -44,8 +44,8 @@ library(kableExtra)
 Load in data
 ```{r load-data}
 
-file_muBday <- "C:/GreySealPups/03_analysis/outputs/bluewhale_kts6/muBday_all_years.csv"
-file_coords <- "C:/World-of-Mia_BACKUP/HG_surveyAreas/ColCode_Coords_WithClineDist.csv"
+file_muBday <- "muBday_all_years.csv"
+file_coords <- "ColCode_Coords_WithClineDist.csv"
 
 # Load CSVs
 muBday_all_years <- read.csv(file_muBday)
